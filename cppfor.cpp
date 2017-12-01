@@ -16,6 +16,24 @@
 #include <time.h>
 #include <stdlib.h>
 
+#include <algorithm>
+#include <functional>
+#include <utility>
+
+
+extern "C"
+{
+  void ddriv2_(int* n, double* tv, double* yv,
+            void(f)(int* n, double* t, double* yv, double* ydotv),
+            double* tout, int* mstate, int* nroot, double* eps,
+            double* ewt, int* mint,
+            double* work, int* lenw,
+            double* iwork, int* leniw,
+            void(g)(int* n, double* t, double* yv, int* iroot),
+	    int* ierflg);
+};
+
+
 using namespace std;
 using namespace boost::numeric::odeint;
 using namespace boost::math::tools;
@@ -41,19 +59,10 @@ const float D=1.;// m-3/s taux d'injection du SiH4 dans le réacteur
 
 
 
-//calcul des diffusions
-state_type DL(Nbr_espece, 0.0); //vecteur de diffusion libre en m2/s
-state_type mu(Nbr_espece, 0.0); //vecteur de mobilite en m2/(V.s)
-state_type DA(Nbr_espece, 0.0); //vecteur de diffusion ambipolaire en m2/s
-
-
 const int Nbr_K=47; //nombre d'equation dans le fichier
 int jmax=Nbr_K;
 int imax=9; //nombre de colonnes
-double **Tab; //creation du tableau
 
-value_type p1,p2,g1,g2,g3,g4,Tp,Tx,Tj;
-state_type Kt(jmax, 0.0);
 
 
 value_type k (int ind, value_type Tp) //fonction pour calculer les K en faisant varier Te dans la bissection
@@ -74,9 +83,9 @@ struct Condition //condition sur la bissection
 
 
 
-struct nsystem //structure qui vient calculer les equations differentielles
+struct ddriv_sys //structure qui vient calculer les equations differentielles
 {
-  void operator()(const state_type &n, state_type &dndt, const value_type &t)
+  void operator()(int* neq, double* t, double* n, double* dndt)
   {
 
 
@@ -98,15 +107,15 @@ dndt[k]=0; //on initialise les equations a zero
 for (int j=0;j<jmax;j++)
 {
 
- p1=Tab[0][j]; //perte 1 (reactif)
- p2=Tab[1][j]; //perte 2 (reactif)
- g1=Tab[2][j]; //gain 1 (produit)
- g2=Tab[3][j]; //gain 2 (produit)
- g3=Tab[4][j]; //gain 3 (produit)
- g4=Tab[5][j]; //gain 4 (produit)
+ p1=static_cast<int>(Tab(0,j)); //perte 1 (reactif)
+ p2=static_cast<int>(Tab(1,j)); //perte 2 (reactif)
+ g1=static_cast<int>(Tab(2,j)); //gain 1 (produit)
+ g2=static_cast<int>(Tab(3,j)); //gain 2 (produit)
+ g3=static_cast<int>(Tab(4,j)); //gain 3 (produit)
+ g4=static_cast<int>(Tab(5,j)); //gain 4 (produit)
  
  Tp=(p2==0 or g3==0)?Te:Tg; //on defini si la temperature vaut Tg ou Te en fonction de si les electrons interviennent dans la reaction  
- Kt[j]={Tab[6][j]*pow(Tp,Tab[7][j])*exp(-Tab[8][j]/Tp)}; //coefficient de la loi d'arrhenius
+ Kt[j]={Tab(6,j)*pow(Tp,Tab(7,j))*exp(-Tab(8,j)/Tp)}; //coefficient de la loi d'arrhenius
 
 //on exprime les therme de gain ou pertes en fonction des especes qui reagissent
 if (p1==200) //un des deux reactifs est de l'argon (densite constante)
@@ -130,8 +139,8 @@ if(g2!=100) {dndt[g2]=dndt[g2]+Tx;}
 if(g3!=100) {dndt[g3]=dndt[g3]+Tx;}
 if(g4!=100) {dndt[g4]=dndt[g4]+Tx;}
 
-}
-
+}/**/
+/*
 //introduction de la diffusion
 for (int a=0; a<Nbr_espece;a++)
 {if (a!=0 or a!=1 or a!=20) {dndt[a]=dndt[a]-C*n[a]/dSi;} //terme representant la pompe 
@@ -139,135 +148,29 @@ if (a==0 or a==1 or a==4 or a==10 or a==20) {dndt[a]=dndt[a]-DA[a]*n[a];}} //dif
 
 dndt[5]=dndt[5]+C; //insertion de SiH4 dans le reacteur 
 dndt[9]=dndt[9]+DA[10]*n[10]+DA[4]*n[4]; // H2+ + e -> H2 sur paroi //SiH3+ + e -> SiH + H2 sur paroi
-dndt[18]=dndt[18]+DA[4]*n[4]; //SiH3+ + e ->  SiH + H2sur paroi
+dndt[18]=dndt[18]+DA[4]*n[4]; //SiH3+ + e ->  SiH + H2sur paroi*/
   }
-
+  /*state_type n;*/
   value_type Te;
-
+  int p1,p2,g1,g2,g3,g4;
+  value_type Tp,Tx,Tj;
+  matrix_type Tab;
+  state_type Kt;
 };
+// define a global for sys
+ddriv_sys global_sys;
 
-struct jacobian
-{
-  void operator()(const state_type &n, matrix_type &jacobi,
-                  const value_type &t, state_type &dfdt ) const
-  {
- 
-value_type   dSi= n[2] + n[3] + n[4] + n[5] + n[6] + n[8] + 2.*n[11] 
-      + 2.*n[12] + 2.*n[13] + 2.*n[14] + 2.*n[15] + 2.*n[16] + n[17] 
-      + n[18] + n[19]; //somme de tous les atomes de si 
-
-for (int h=0;h<Nbr_espece;h++) //initialisation du jacobien a zero 
-
-{
-for (int p=0;p<Nbr_espece;p++)
-{
-jacobi(h,p)=0.0;
-jacobi(h,p)=0.0;
-jacobi(h,p)=0.0;
-jacobi(h,p)=0.0;
-jacobi(h,p)=0.0;
-jacobi(h,p)=0.0;
-}
+// calls the functor, static global
+inline void ret_sys(int* n, double* t, double* yv, double* ydotv){
+//   void operator()
+  global_sys(n, t, yv, ydotv);
 }
 
-for (int j=0;j<jmax;j++)
-{
-
- p1=Tab[0][j];
- p2=Tab[1][j];
- g1=Tab[2][j];
- g2=Tab[3][j];
- g3=Tab[4][j];
- g4=Tab[5][j]; 
- Tp=(p2==0 or g3==0)?Te:Tg;
-
- Kt[j]={Tab[6][j]*pow(Tp,Tab[7][j])*exp(-Tab[8][j]/Tp)};
-
-for (int k=0;k<Nbr_espece;k++)
-{
-
-if (p1==200 and p2==k and p1!=p2) //cas d'une reaction faisant intervenir de l'argon , on derive par rapport a p2
-	{Tj=n_Ar*Kt[j];
-	jacobi(p2,k)=jacobi(p2,k)-Tj;
-	if (g1!=200) {jacobi(g1,k)=jacobi(g1,k)+Tj;}
-	if (g2!=100) {jacobi(g2,k)=jacobi(g2,k)+Tj;}
-	if (g3!=100) {jacobi(g3,k)=jacobi(g3,k)+Tj;}
-	if (g4!=100) {jacobi(g4,k)=jacobi(g4,k)+Tj;}
-	}
-if (p1!=200 and p2==k and p1!=p2) //cas d'une reaction sans argon , on derive par rapport a p2
-	{Tj=n[p1]*Kt[j];
-	jacobi(p1,k)=jacobi(p1,k)-Tj;
-	jacobi(p2,k)=jacobi(p2,k)-Tj;
-	if (g1!=200) {jacobi(g1,k)=jacobi(g1,k)+Tj;}
-	if (g2!=100) {jacobi(g2,k)=jacobi(g2,k)+Tj;}
-	if (g3!=100) {jacobi(g3,k)=jacobi(g3,k)+Tj;}
-	if (g4!=100) {jacobi(g4,k)=jacobi(g4,k)+Tj;}
-	}
-if (p2==100 and p1==k and p1!=p2) //cas ou il y a qu'un reactif p1, on derive par rapport a p1
-	{Tj=Kt[j];
-	jacobi(p1,k)=jacobi(p1,k)-Tj;
-	if (g1!=200) {jacobi(g1,k)=jacobi(g1,k)+Tj;}
-	if (g2!=100) {jacobi(g2,k)=jacobi(g2,k)+Tj;}
-	if (g3!=100) {jacobi(g3,k)=jacobi(g3,k)+Tj;}
-	if (g4!=100) {jacobi(g4,k)=jacobi(g4,k)+Tj;}
-	}
-if (p1==k and p1!=p2 and p2!=100 ) //cas d'une reaction sans argon , on derive par rapport a p1
-	{Tj=n[p2]*Kt[j];
-	jacobi(p1,k)=jacobi(p1,k)-Tj;
-	jacobi(p2,k)=jacobi(p2,k)-Tj;
-	if (g1!=200) {jacobi(g1,k)=jacobi(g1,k)+Tj;}
-	if (g2!=100) {jacobi(g2,k)=jacobi(g2,k)+Tj;}
-	if (g3!=100) {jacobi(g3,k)=jacobi(g3,k)+Tj;}
-	if (g4!=100) {jacobi(g4,k)=jacobi(g4,k)+Tj;}
-	}
-if (p1==p2) //cas ou les deux reactifs sont egaux
-	{Tj=2*n[p1]*Kt[j];
-	if (p1!=200) {jacobi(p1,k)=jacobi(p1,k)-Tj;}
-	if (p2!=100) {jacobi(p2,k)=jacobi(p2,k)-Tj;}
-	if (g1!=200) {jacobi(g1,k)=jacobi(g1,k)+Tj;}
-	if (g2!=100) {jacobi(g2,k)=jacobi(g2,k)+Tj;}
-	if (g3!=100) {jacobi(g3,k)=jacobi(g3,k)+Tj;}
-	if (g4!=100) {jacobi(g4,k)=jacobi(g4,k)+Tj;}
-	}
-
+// dummy function, required by ddriv2_
+inline void g(int* n, double* t, double* yv, int* iroot) {
 }
 
-}
 
-//diffusion dans le jacobien 
-for (int a=0; a<Nbr_espece;a++)
-{if (a!=0 or a!=1 or a!=20) {jacobi(a,a)=jacobi(a,a)-C/dSi;} //perte dans la pompe
-if (a==0 or a==1 or a==4 or a==10 or a==20) {jacobi(a,a)=jacobi(a,a)-DA[a];}} //diffusion 
-
-jacobi(9,4)=jacobi(9,4)+DA[4];//SiH3+ + e ->  SiH + H2 sur paroi
-jacobi(9,10)=jacobi(9,10)+DA[10];// H2+ + e -> H2 sur paroi
-jacobi(18,4)=jacobi(18,4)+DA[4];// SiH3+ + e ->  SiH + H2 sur paroi
-
-    dfdt( 0 ) = 0.0;
-    dfdt( 1 ) = 0.0;
-    dfdt( 2 ) = 0.0;
-    dfdt( 3 ) = 0.0;
-    dfdt( 4 ) = 0.0;
-    dfdt( 5 ) = 0.0;
-    dfdt( 6 ) = 0.0;
-    dfdt( 7 ) = 0.0;
-    dfdt( 8 ) = 0.0;
-    dfdt( 9 ) = 0.0;
-    dfdt( 10 ) = 0.0;
-    dfdt( 11 ) = 0.0;
-    dfdt( 12 ) = 0.0;
-    dfdt( 13 ) = 0.0;
-    dfdt( 14 ) = 0.0;
-    dfdt( 15 ) = 0.0;
-    dfdt( 16 ) = 0.0;
-    dfdt( 17 ) = 0.0;
-    dfdt( 18 ) = 0.0;
-    dfdt( 19 ) = 0.0;
-    dfdt( 20 ) = 0.0;
-  }
-//stop modif
-  value_type Te;
-};
 
 //calcul de la temperature a partir de la puissance dans le reacteur 
 struct etemperature
@@ -289,6 +192,9 @@ struct etemperature
   state_type n;
 };
 
+
+
+
 //ecriture des densite dans un fichier 
 void write_density( const value_type t, const value_type Te, const state_type &n)
 {
@@ -306,7 +212,7 @@ int main(int argc, char **argv)
 
 //lecture dans le fichier contenant les reactions et les coefficients pour arrhenius  
 ifstream fichier_k ("/home/cacot/Documents/CodeAutom/fichagarwal.dat");
-
+double **Tab; //creation du tableau
 Tab = new double*[imax];
 Tab[0] = new double[imax*jmax];
 
@@ -354,7 +260,7 @@ cout <<"t"<<'\t'<<"Te"<<'\t'<<"e"<<'\t'<<"Armet"<<'\t'<< "SiH3m"<<'\t'
   // vecteur de densite et conditions initiales
   state_type n_ini(Nbr_espece, 0.0); 
   n_ini[0] = 1.e16;
-  n_ini[1] = 1.e16;  
+  n_ini[1] = 1.e10;  
   n_ini[5] = n_SiH4_ini;
   n_ini[20] =1.e16;
   n_ini[4] = n_ini[0]-n_ini[20];
@@ -362,6 +268,10 @@ cout <<"t"<<'\t'<<"Te"<<'\t'<<"e"<<'\t'<<"Armet"<<'\t'<< "SiH3m"<<'\t'
 state_type DL(Nbr_espece, 0.0); //vecteur de diffusion libre en m2/s
 state_type mu(Nbr_espece, 0.0); //vecteur de mobilite en m2/(V.s)
 state_type DA(Nbr_espece, 0.0); //vecteur de diffusion ambipolaire en m2/s
+
+
+
+state_type Kt(jmax, 0.0);
 
 //Coefficients de diffusion libres de Chapman-Enskog
 value_type D_mol=2.; // diametre de (molecule + argon)/2 en A
@@ -391,7 +301,7 @@ mu[20]= DL[20]/Tg;
 
 
 // variable du temps
-  value_type t = 0.0;
+  double t = 0.0;
   value_type dt = 1.0e-8;
   value_type Tmax = 20.e-3;
   value_type NT = Tmax/dt;
@@ -418,8 +328,9 @@ mu[20]= DL[20]/Tg;
   Te = pair_Te.first;
   cerr << "\n[ii]  Temperature Initiale = " << Te << endl;
 
-
-
+//global_sys.n=n_ini;
+global_sys.Tab=Tab;
+global_sys.Kt=Kt;
 /* 
 //verification du coefficient d'arrhenius et de la temperature 
 for (int j=0;j<jmax;j++)
@@ -435,33 +346,44 @@ cerr<<k(44,Te)<<endl;
 cerr<<k45(Te)<<endl;
 */
 
-  // declare system et jacobian
-  nsystem sys;
-  jacobian jac;
+//   ddriv_sys dsys;
+  int n = Nbr_espece;
+  int mstate = -1;
+  int nroot = 0;
+  double eps = 1.e-6;
+  double ewt = 1.e-10;
+  int mint = 3;
 
-  // declare stepper Rosenbrock
-  stepper_type stepper;
+  int lenw = n*n+17*n+252;
+  std::vector<double> work;
+
+  int leniw = n+50;
+  std::vector<double> iwork;
+
+  work.resize(lenw);
+  iwork.resize(leniw);
+  
+  int ierflg;
 
   for (int i = 1; i <= NT+1 ; i++)
   {
 //calcul des coefficients pour la diffusion ambipolaire
 value_type n_mu= n_new[0]*mu[0] + n_new[4]*mu[4] + n_new[10]*mu[10] + n_new[20]*mu[20];
 value_type n_DL= -n_new[0]*DL[0] + n_new[4]*DL[4] + n_new[10]*DL[10] + n_new[20]*DL[20];
-if (i==NT){cerr<<C<<endl;}
+
 //diffusion ambipolaire
 DA[0]=(DL[0]+mu[0]*n_DL/n_mu)*diff; //s-1
 DA[1]=DL[1]*diff;
 DA[4]=(DL[4]-mu[4]*n_DL/n_mu)*diff;
 DA[10]=(DL[10]-mu[10]*n_DL/n_mu)*diff;
 DA[20]=(DL[20]-mu[20]*n_DL/n_mu)*diff;
-    
-// update Te dans system et jacobian
-    sys.Te = Te;
-    jac.Te = Te;
 
-// integration au pas dt
-    stepper.do_step( std::make_pair( sys, jac ), n_new, t, dt, n_err);
 
+double tf= t+ dt;
+
+    ddriv2_(&n, &t, &n_new[0], ret_sys, &tf, &mstate, &nroot, &eps, &ewt, &mint, &work[0],
+            &lenw, &iwork[0], &leniw, g, &ierflg);
+    cerr<<"patate1"<<endl;
     // assignation des valeur a la fonction etemp
     etemp.n = n_new;
     if (i%((int)(NT/100))==0)
