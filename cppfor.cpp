@@ -193,7 +193,7 @@ struct etemperature {
 };
 
 // ecriture des densite dans un fichier
-void write_density(const value_type t, const value_type Te,
+/*void write_density(const value_type t, const value_type Te,
                    const state_type& n) {
   cout << t << '\t' << Te << '\t' << n[0] << '\t' << n[1] << '\t' << n[2]
        << '\t' << n[3] << '\t' << n[4] << '\t' << n[5] << '\t' << n[6] << '\t'
@@ -201,7 +201,7 @@ void write_density(const value_type t, const value_type Te,
        << '\t' << n[12] << '\t' << n[13] << '\t' << n[14] << '\t' << n[15]
        << '\t' << n[16] << '\t' << n[17] << '\t' << n[18] << '\t' << n[19]
        << '\t' << n[20] << '\t' << n[13] + n[16] << endl;
-}
+}*/
 
 void write_density(ofstream& fp, const value_type t, const value_type Te,
                    const state_type &n) {
@@ -239,10 +239,10 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  value_type Te = 0.7;  // valeur initiale de la temperature
+  value_type Te = 3.;  // valeur initiale de la temperature
 
   // legende
-  cout << "t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
+  outfile << "t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
        << "SiH3m" << '\t' << "SiH2" << '\t' << "SiH3p" << '\t' << "SiH4" << '\t'
        << "SiH3" << '\t' << "H" << '\t' << "SiH2" << '\t' << "H2" << '\t'
        << "H2p" << '\t' << "Si2H5" << '\t' << "Si2H2" << '\t' << "Si2H4m"
@@ -298,7 +298,7 @@ int main(int argc, char** argv) {
   // variable du temps
   double t = 0.0;
   value_type dt = 1.0e-8;
-  value_type Tmax = 20.e-3;
+  value_type Tmax = 20.e-6;
   value_type NT = Tmax / dt;
 
   // variable pour la bissection
