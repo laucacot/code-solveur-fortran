@@ -179,14 +179,16 @@ struct etemperature {
 
   state_type n;
 
+  // fonction pour calculer les K en faisant
+  // varier Te dans la bissection
   value_type k(int ind,
-               value_type Tp)  // fonction pour calculer les K en faisant
-                               // varier Te dans la bissection
-  {
+               value_type Tp) {
     value_type K;
     K = Tab(6, ind) * pow(Tp, Tab(7, ind)) * exp(-Tab(8, ind) / Tp);
     return K;
   }
+
+  // Tab as member
   matrix_type Tab;
 };
 
@@ -201,7 +203,21 @@ void write_density(const value_type t, const value_type Te,
        << '\t' << n[20] << '\t' << n[13] + n[16] << endl;
 }
 
+void write_density(ofstream& fp, const value_type t, const value_type Te,
+                   const state_type &n) {
+  fp << t << '\t' << Te << '\t' << n[0] << '\t' << n[1] << '\t' << n[2]
+       << '\t' << n[3] << '\t' << n[4] << '\t' << n[5] << '\t' << n[6] << '\t'
+       << n[7] << '\t' << n[8] << '\t' << n[9] << '\t' << n[10] << '\t' << n[11]
+       << '\t' << n[12] << '\t' << n[13] << '\t' << n[14] << '\t' << n[15]
+       << '\t' << n[16] << '\t' << n[17] << '\t' << n[18] << '\t' << n[19]
+       << '\t' << n[20] << '\t' << n[13] + n[16] << endl;
+}
+
 int main(int argc, char** argv) {
+  // output stream
+  ofstream outfile;
+  outfile.open("dens.dat");
+
   // lecture dans le fichier contenant les reactions et les coefficients pour
   // arrhenius
   ifstream fichier_k("fichagarwal.dat");
@@ -220,9 +236,8 @@ int main(int argc, char** argv) {
 
   } else {
     cerr << "ERREUR: Impossible d'ouvrir le fichier en lecture." << endl;
+    return -1;
   }
-
-  // cerr << Tab[0][jmax-1]<<endl;
 
   value_type Te = 0.7;  // valeur initiale de la temperature
 
@@ -298,10 +313,13 @@ int main(int argc, char** argv) {
 
   // declare la fonction etemperature
   etemperature etemp;
+
   // assigne les valeur a la fonction etemp
   etemp.n = n_ini;
 
+  // set Tab in etemp
   etemp.Tab = Tab;
+
   // premier calcul de Te
   pair<value_type, value_type> pair_Te =
       toms748_solve(etemp, min, max, tol, max_iter);
@@ -360,22 +378,24 @@ int main(int argc, char** argv) {
     DA[10] = (DL[10] - mu[10] * n_DL / n_mu) * diff;
     DA[20] = (DL[20] - mu[20] * n_DL / n_mu) * diff;
 
+    global_sys.Te = Te;
+
     double tf = t + dt;
 
     ddriv2_(&n, &t, &n_new[0], ret_sys, &tf, &mstate, &nroot, &eps, &ewt, &mint,
             &work[0], &lenw, &iwork[0], &leniw, g, &ierflg);
-    cerr << "patate1" << endl;
+//     cerr << "patate1" << endl;
     // assignation des valeur a la fonction etemp
     etemp.n = n_new;
     if (i % ((int)(NT / 100)) == 0) {
-      write_density(t, Te, n_new);
+      write_density(outfile, t, Te, n_new);
     }
     // trouver un noyuveau Te
     pair<value_type, value_type> pair_Te =
         toms748_solve(etemp, min, max, tol, max_iter);
 
     Te = pair_Te.first;
-    //     t += dt;
+//     t += dt;
     n_ini = n_new;  // update
   }
 
