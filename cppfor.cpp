@@ -42,7 +42,7 @@ const double n_SiH4_ini = n_Ar / 30.;        // densite de SiH4 initiale
 const int Nbr_espece = 24;
 // const double DP =1.e23;  // eV/s.m3 puissance totale du systeme par unite de
 // volume imposee
-const double C = 1.35e21;   // m-3/s taux d'injection du SiH4 dans le réacteur
+const double C = 2.e21;   // m-3/s taux d'injection du SiH4 dans le réacteur
 const double Tg = 0.02758;  // eV soit 320 K
 
 const int Nbr_K = 47;  // nombre d'equation dans le fichier
@@ -289,8 +289,7 @@ struct etemperature {
     // diffusion ambipolaire
     double Diffe = (DL[0] + mu[0] * n_DL / n_mu);  // s-1
 
-    double Vfl =
-        cVfl * n[22] / n[21];  // V potentiel flottant e*qNP / 4 pi eps0 rNP
+    double Vfl = cVfl * n[22] / n[21];  // V potentiel flottant e*qNP / 4 pi eps0 rNP
     double sNP = pi * pow(n[21], 2);  // surface de la NP
     // if (Vfl<=0.){
     double Fe = sNP * vth[0] * exp(Vfl / Te);
@@ -308,7 +307,7 @@ else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
            k(42, Te) * n[6] * 1.5 * Te + k(43, Te) * n[18] * 1.5 * Te +
            k(44, Te) * n[17] * 1.25 //+ Diffe * 1.5 * Te /*perte sur les parois*/
            + Fe * nNP * 1.5 * Te                     /*pertes sur les NP*/
-           + rate * 1.5 * Te; /*perte taux injection evacuation*/
+           + rate * 1.5 * Te ;/*perte taux injection evacuation*/
 
     /*
         return -DP / n[0] + k(0, Te) * n_Ar * 16.14 + k(1, Te) * n_Ar * 12.31 +
@@ -379,7 +378,7 @@ int main(int argc, char** argv) {
   }
 
   double Te = 3.;  // valeur initiale de la temperature
-
+cerr<<n_SiH4_ini<<endl;
   // legende
   outfile << "#t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
           << "SiH3m" << '\t' << "SiH2" << '\t' << "SiH3p" << '\t' << "SiH4"
@@ -482,7 +481,7 @@ int main(int argc, char** argv) {
   double t = 0.0;
 
   double dt = 1.e-8;
-  double Tmax = 20.e-4;//20.e-3;
+  double Tmax = 20.e-6;//20.e-3;
   double NT = Tmax / dt;
 
 
