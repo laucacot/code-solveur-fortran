@@ -306,8 +306,8 @@ else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
            k(13, Te) * n[3] * 1.16 + k(14, Te) * n[8] * 1.5 * Te +
            k(15, Te) * n[9] * 10.09 + k(16, Te) * n[9] * 16.05 +
            k(42, Te) * n[6] * 1.5 * Te + k(43, Te) * n[18] * 1.5 * Te +
-           k(44, Te) * n[17] * 1.25 + Diffe * 1.5 * Te /*perte sur les parois*/
-           + Fe * nNP * 1.5 * Te                       /*pertes sur les NP*/
+           k(44, Te) * n[17] * 1.25 //+ Diffe * 1.5 * Te /*perte sur les parois*/
+           + Fe * nNP * 1.5 * Te                     /*pertes sur les NP*/
            + rate * 1.5 * Te; /*perte taux injection evacuation*/
 
     /*
@@ -481,8 +481,8 @@ int main(int argc, char** argv) {
   // variable du temps
   double t = 0.0;
 
-  double dt = 10.0e-10;
-  double Tmax = 2e-7;//20.e-3;
+  double dt = 1.e-8;
+  double Tmax = 20.e-4;//20.e-3;
   double NT = Tmax / dt;
 
 
