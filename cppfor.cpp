@@ -123,6 +123,7 @@ value_type ffp20=factp*vth[20]*n[20];
 value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
 
 
+
     /*value_type dSi = n[2] + n[3] + n[4] + n[5] + n[6] + n[8] + 2. * n[11] +
                      2. * n[12] + 2. * n[13] + 2. * n[14] + 2. * n[15] +
                      2. * n[16] + n[17] + n[18] +
@@ -147,39 +148,208 @@ value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
       Kt[j] = {Tab(6, j) * pow(Tp, Tab(7, j)) *
                exp(-Tab(8, j) / Tp)};  // coefficient de la loi d'arrhenius
 
-      // on exprime les therme de gain ou pertes en fonction des especes qui
-      // reagissent
-      if (p1 == 200)  // un des deux reactifs est de l'argon (densite constante)
-      {
-        Tx = n_Ar * n[p2] * Kt[j];
-      } else if (p2 == 100)  // il n'y a qu'un reactif
-      {
-        Tx = n[p1] * Kt[j];
-      } else  // cas normal de deux reactifs qui peuvent etre egaux
-      {
-        Tx = n[p1] * n[p2] * Kt[j];
-      }
+      
 
-      if (p1 != 200) {
-        dndt[p1] = dndt[p1] - Tx;
-      }
-      if (p2 != 100) {
-        dndt[p2] = dndt[p2] - Tx;
-      }
-      if (g1 != 200) {
-        dndt[g1] = dndt[g1] + Tx;
-      }
-      if (g2 != 100) {
-        dndt[g2] = dndt[g2] + Tx;
-      }
-      if (g3 != 100) {
-        dndt[g3] = dndt[g3] + Tx;
-      }
-      if (g4 != 100) {
-        dndt[g4] = dndt[g4] + Tx;
-      }
+    } 
+value_type rr1=Kt[0]*n_Ar*n[0];
+value_type rr2=Kt[1]*n_Ar*n[0];
+value_type rr3=Kt[2]*n[1]*n[0];
+value_type rr4=Kt[3]*n[1]*n[1];
+value_type rr5=Kt[4]*n[1]*n[0];
+value_type rr6=Kt[5]*n[5]*n[0];
+value_type rr7=Kt[6]*n[5]*n[0];
+value_type rr8=Kt[7]*n[5]*n[0];
+value_type rr9=Kt[8]*n[5]*n[0];
+value_type rr10=Kt[9]*n[5]*n[0];
+value_type rr11=Kt[10]*n[6]*n[0];
+value_type rr12=Kt[11]*n[6]*n[0];
+value_type rr13=Kt[12]*n[2]*n[0];
+value_type rr14=Kt[13]*n[3]*n[0];
+value_type rr15=Kt[14]*n[8]*n[0];
+value_type rr16=Kt[15]*n[9]*n[0];
+value_type rr17=Kt[16]*n[9]*n[0];
+value_type rr18=Kt[17]*n[5]*n[1];
+value_type rr19=Kt[18]*n[5]*n[1];
+value_type rr20=Kt[19]*n[6]*n[1];
+value_type rr21=Kt[20]*n[8]*n[1];
+value_type rr22=Kt[21]*n[9]*n[1];
+value_type rr23=Kt[22]*n[6]*n[6];
+value_type rr24=Kt[23]*n[5]*n[6];
+value_type rr25=Kt[24]*n[8]*n[9];
+value_type rr26=Kt[25]*n[8];
+value_type rr27=Kt[26]*n[5]*n[7];
+value_type rr28=Kt[27]*n[8]*n[8];
+value_type rr29=Kt[28]*n[8]*n[7];
+value_type rr30=Kt[29]*n[6];
+value_type rr31=Kt[30]*n[6]*n[7];
+value_type rr32=Kt[31]*n[3]*n[10];
+value_type rr33=Kt[32]*n[2]*n[10];
+value_type rr34=Kt[33]*n[2]*n[6];
+value_type rr35=Kt[34]*n[2]*n[4];
+value_type rr36=Kt[35]*n[3]*n[5];
+value_type rr37=Kt[36]*n[3]*n[6];
+value_type rr38=Kt[37]*n[2]*n[8];
+value_type rr39=Kt[38]*n[2]*n[5];
+value_type rr40=Kt[39]*n[3]*n[4];
+value_type rr41=Kt[40]*n[3]*n[20];
+value_type rr42=Kt[41]*n[2]*n[20];
+value_type rr43=Kt[42]*n[6]*n[0];
+value_type rr44=Kt[43]*n[18]*n[0];
+value_type rr45=Kt[44]*n[17]*n[0];
+value_type rr46=Kt[45]*n[3]*n[18];
+value_type rr47=Kt[46]*n[17]*n[10];
 
-    } /**/
+dndt[0]=
+       rr1 + rr3 + rr4 - rr8 - rr9 + rr10
+      - rr11 + rr12 + rr13 + rr14 - rr15 + rr17
+      - rr43 - rr44 + rr45
+      - DA[0]*n[0]
+      - rate*n[0]                     /*! sortie pompe*/
+      - ffe*nNP;  /*! chargement des NP  */
+
+      dndt[1]= 
+      rr2 - rr3 - 2.*rr4 - rr5 - rr18
+      - rr19 - rr20 - rr21 - rr22
+      - DA[1]*n[1]
+     - rate*n[1]                       /*! sortie pompe*/
+     - sNP*vth[1]*nNP*d[1] ;           /* ! pertes sur les NP*/
+
+	dndt[2]= 
+        rr8 - rr13 - rr33 - rr34 - rr35 + rr37 - rr38 - rr39
+      - rr42 + rr43
+      - rate*n[2]               /*! sortie pompe*/
+      - ffn2*nNP;   /*! chargement des NP*/
+
+      dndt[3]= 
+        rr9 + rr11 - rr14 + rr15 - rr32
+      - rr36 - rr37 - rr40 - rr41 - rr46
+      - rate*n[3]               /*! sortie pompe*/
+      - ffn3*dNP;     /* ! chargement des NP*/
+
+	dndt[4]= 
+        rr10 + rr12 - rr35 - rr40
+      - DA[4]*n[4]
+      - ratep*n[4]               /*! sortie pompe*/
+      - ffp4*nNP; /* ! chargement des NP*/
+
+	dndt[5]= C            /*   ! taux d'injection du SiH4 dans le reacteur*/
+      - rr6 - rr7 - rr8 - rr9 - rr10
+      - rr18 - rr19 + rr23 - rr24 + rr25 - rr27
+      - rr36 - rr39
+      - rate*n[5]              /*! sortie pompe*/
+      - ccol*coll[5]*n[5];     /*! collage sur les NP*/
+
+	dndt[6]= 
+        rr6 - rr11 - rr12 + rr13 + rr18
+      - rr20 - 2.*rr23 - rr24 + rr27 - rr30 - rr31
+      + rr33 - rr34 - rr37 + rr42 - rr43
+      - rate*n[6]        /* ! sortie pompe*/
+      - ccol*coll[6]*n[6];      /*! collage sur les NP*/
+     
+      dndt[7]= 
+        rr6 + 2.*rr7
+      + rr8 + 2.*rr9 + rr10 + rr11 + 2.*rr16 + rr18
+      + 2.*rr19 + rr20 + rr21 + 2.*rr22 - rr27 - rr29 - rr31
+      - rate*d(8)
+      + (ffn2 + ffp4 + ffn15 + ffn16 + ffn17)*nNP  /*! liberation de H lors du chargement des NP*/
+      + ccol*(coll[6]*n[6] + coll[11]*n[11] + coll[18]*n[18]);
+
+	dndt[8]= 
+        rr7 + rr14 - rr15 + rr19 + rr20 - rr21 + rr23 - rr25
+      - rr26 - 2.*rr28 - rr29
+      + rr31 + rr32 + rr37 - rr38 + rr41 + rr46
+      - rate*n[8]
+      - ccol*coll[8]*n[8];    /* ! collage sur les NP*/
+
+	dndt[9]= 
+      - rr16 - rr17 - rr22 + rr24 - rr25
+      + rr26 + rr27 + rr28 + rr29 + rr30 + rr31
+      + rr32 + rr33 + rr34 + rr36 + rr38 + rr39 + rr47
+      - rate*n[9]
+      + DA[10]*n[10]            /*! H2+ + e -> H2 par diffusion*/
+      + (ffn2 + ffn3 + ffp4 + ffp10 + 2.*ffn13
+      + ffn15 + 2.*ffn16)*nNP ;                      /* ! liberation de H2 lors du chargement des NP*/
+      + ccol*(2.*coll[5]*n[5] + coll[6]*n[6] + coll[8]*n[8]
+            + 2.*coll[11]*n[11] + coll[12]*n[12] + 3.*coll[14]*n[14])
+      + DA[4]*n[4];  /*!  SiH3+ + e -> SiH + H2, Si + H2 + H par diffusion  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+
+	dndt[10]= 
+        rr17 - rr32 - rr33 - rr47
+      - DA[10]*n[10]
+      - ratep*n[10]
+      - ffp10*nNP;   /* ! chargement des NP*/
+
+	dndt[11]= 
+        rr24 + rr40
+      - rate*n[11]
+      - ccol*coll[11]*n[11] ;   /* ! collage sur les NP*/
+
+	dndt[12]= 
+        rr28
+      - rate*n[12]
+      - ccol*coll[12]*n[12];/*    ! collage sur les NP*/
+
+	dndt[13]= 
+        rr34 + rr36
+      - rate*n[13]
+      - ffn13*nNP;/*  ! chargement des NP*/
+	 
+	dndt[14]= 
+        rr35
+      - rate*n[14]
+      - ccol*coll[14]*n[14];   /*    ! collage sur les NP*/
+
+	dndt[](16)= 
+     &   rr38
+     & - rate*d(16)
+     & - ffn16*dNP      !  chargement des NP
+
+	dndt[](17)= 
+     &   rr39
+     & - rate*d(17)
+     & - ffn17*dNP        ! chargement des NP
+
+	dndt[](18)= 
+     &   rr44 - rr45 + rr46 - rr47
+     & - rate*d(18)
+     & - ffn18*dNP          ! chargement des NP
+
+	dndt[](19)= 
+     &   rr21 + rr29 + rr30 - rr44 + rr45 - rr46 + rr47
+     & - rate*d(19)
+     & - ccol*coll(19)*d(19)     ! collage sur les NP
+     & + Diff(5)*d(5)  !  SiH3+ + e -> SiH + H2 par diffusion  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+	dndt[](20)=
+     &   rr26
+     & - rate*d(20)
+     & - ccol*coll(20)*d(20)      ! collage sur les NP
+*     & + 0.3*Diff(5)*d(5)     !  SiH3+ + e -> Si + H2 + H par diffusion  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+	dndt[](21)= 
+     &   rr1 + rr3 + rr4 - rr41 - rr42
+     & - Diff(21)*d(21)
+     & - ratep*d(21)              ! sortie
+     & - ffp21*dNP           ! chargement des NP
+
+c Collage dR/dt sur les NP:
+
+	dndt[](22)= 
+     &   coll(6)*d(6) + coll(7)*d(7) + coll(9)*d(9) 
+     & + 2.*coll(12)*d(12) + 2.*coll(13)*d(13) +
+     & + 2.*coll(15)*d(15) + coll(19)*d(19) + coll(20)*d(20)
+     & + (ffn3 + ffn4 + 2.*ffn14 + 2.*ffn16 
+     & + 2.*ffn17 + ffn18 + ffp5)*vi/sNP
+
+c Charge/e des NP par OML:
+
+      dndt[](23)=                             ! s-1 ! dQN/dt
+     & - ffe - ffn3 - ffn4 - ffn14 - ffn16 - ffn17 - ffn18
+     & + ffp5 + ffp11 + ffp21
+
+c Densite des NP:
+
+      dndt[](24)= dndt[](14) + dndt[](17)
       /*
       //introduction de la diffusion
       for (int a=0; a<Nbr_espece;a++)
@@ -191,7 +361,7 @@ value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
       dndt[5]=dndt[5]+C; //insertion de SiH4 dans le reacteur
       dndt[9]=dndt[9]+DA[10]*n[10]+DA[4]*n[4]; // H2+ + e -> H2 sur paroi //SiH3+
       + e -> SiH + H2 sur paroi   dndt[18]=dndt[18]+DA[4]*n[4]; //SiH3+ + e ->   SiH
-      + H2sur paroi*/ 
+      + H2sur paroi 
     // introduction de la diffusion
     for (int a = 0; a < Nbr_espece; a++) {
 
@@ -201,11 +371,11 @@ value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
     }  // diffusion
 
 
- /*  dndt[5] = dndt[5] + C;  // insertion de SiH4 dans le reacteur
+   dndt[5] = dndt[5] + C;  // insertion de SiH4 dans le reacteur
     dndt[9] = dndt[9] + DA[10] * n[10] + DA[4] * n[4];
     // H2+ + e -> H2 sur paroi
     //SiH3+ + e -> SiH + H2 sur paroi
-    dndt[18] = dndt[18] + DA[4] * n[4];  // SiH3+ + e ->  SiH + H2sur paroi*/
+    dndt[18] = dndt[18] + DA[4] * n[4];  // SiH3+ + e ->  SiH + H2sur paroi
 
     dndt[0]=dndt[0]-ffe*nNP;
     dndt[1]=dndt[1]-sNP*vth[1]*nNP*n[1];
@@ -251,7 +421,7 @@ value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
 		+ffp4 +ffp10 +ffp20;
 
     // Densite des NP:
-    dndt[23]=dndt[23] + dndt[13] +dndt[16];
+    dndt[23]=dndt[23] + dndt[13] +dndt[16];*/
 
   }
   state_type n;
@@ -359,7 +529,7 @@ void write_density(ofstream& fp, const value_type t, const value_type Te,
 int main(int argc, char** argv) {
   // output stream
   ofstream outfile;
-  outfile.open("dens.dat");
+  outfile.open("densnonautom.dat");
 
   // lecture dans le fichier contenant les reactions et les coefficients pour
   // arrhenius
