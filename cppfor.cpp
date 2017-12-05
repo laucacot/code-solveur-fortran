@@ -6,6 +6,7 @@
 
 #include <vector>
 // Optimization
+#define NDEBUG
 #define BOOST_UBLAS_NDEBUG
 #include <stdlib.h>
 #include <time.h>
@@ -308,13 +309,13 @@ struct etemperature {
 	+k(10,Te)*n[6]*1.94 + k(11,Te)*n[6]*1.30 + k(12,Te)*n[2]*1.16
     	+k(13,Te)*n[3]*1.16 + k(14,Te)*n[8]*1.5*Te + k(15,Te)*n[9]*10.09
     	+k(16,Te)*n[9]*16.05 +k(42,Te)*n[6]*1.5*Te +k(43,Te)*n[18]*1.5*Te
-    	+k(44,Te)*n[17]*1.25;
+    	+k(44,Te)*n[17]*1.25
 	+Diffe*1.5*Te /*perte sur les parois*/
 	+Fe*nNP*1.5*Te /*pertes sur les NP*/
-	+rate*1.5*Te ;/*perte taux injection evacuation
+	+rate*1.5*Te ;/*perte taux injection evacuation*/
 
-
-   /* return -DP / n[0] + k(0, Te) * n_Ar * 16.14 + k(1, Te) * n_Ar * 12.31 +
+/*
+    return -DP / n[0] + k(0, Te) * n_Ar * 16.14 + k(1, Te) * n_Ar * 12.31 +
            k(2, Te) * n[1] * 5.39 - k(3, Tg) * n[1] * n[1] * 8.48 -
            k(4, Te) * n[1] * 12.31 + k(5, Te) * n[5] * 10.68 +
            k(6, Te) * n[5] * 10.68 + k(7, Te) * n[5] * 8.29 +
@@ -385,7 +386,7 @@ int main(int argc, char** argv) {
   value_type Te = 3.;  // valeur initiale de la temperature
 
   // legende
-  outfile << "t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
+  outfile << "#t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
        << "SiH3m" << '\t' << "SiH2" << '\t' << "SiH3p" << '\t' << "SiH4" << '\t'
        << "SiH3" << '\t' << "H" << '\t' << "SiH2" << '\t' << "H2" << '\t'
        << "H2p" << '\t' << "Si2H5" << '\t' << "Si2H2" << '\t' << "Si2H4m"
@@ -486,8 +487,8 @@ for (int i=0; i < Nbr_espece; i++)
 
   // variable du temps
   double t = 0.0;
-  value_type dt = 1.0e-8;
-  value_type Tmax = 20.e-3;
+  value_type dt = 10.0e-10;
+  value_type Tmax = 10e-5;//20.e-3;
   value_type NT = Tmax / dt;
 
   // variable pour la bissection
