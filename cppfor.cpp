@@ -6,6 +6,7 @@
 
 #include <vector>
 // Optimization
+#define NDEBUG
 #define BOOST_UBLAS_NDEBUG
 #include <stdlib.h>
 #include <time.h>
@@ -42,19 +43,31 @@ typedef rosenbrock4<value_type> stepper_type;
 const value_type pression = 0.1 / 760;  // atm soit 0.1 torr et 13 pascal
 const value_type L = 3.e-2;             // distance entre deux plaques en m
 const value_type pi = M_PI;
-const value_type diff = pow((pi / L), 2.);   // facteur pour la diffusion
+const value_type diff = pow((pi / L), 2.)*2.;   // facteur pour la diffusion
 const value_type n_Ar = pression * 2.69e25;  // densite d'argon en m-3
 const value_type n_SiH4_ini = n_Ar / 30.;    // densite de SiH4 initiale
-const int Nbr_espece = 21;
-const value_type DP =
-    1.e23;  // eV/s.m3 puissance totale du systeme par unite de volume imposee
+const int Nbr_espece = 24;
+//const value_type DP =1.e23;  // eV/s.m3 puissance totale du systeme par unite de volume imposee
 const float C = 1.35e21;  // m-3/s taux d'injection du SiH4 dans le réacteur
 const value_type Tg = 0.02758;  // eV soit 320 K
-const float D = 1.;  // m-3/s taux d'injection du SiH4 dans le réacteur
+
 
 const int Nbr_K = 47;  // nombre d'equation dans le fichier
 const int jmax = Nbr_K;
 const int imax = 9;  // nombre de colonnes
+
+
+const value_type e0=1.6022e-19; //coulomb
+const value_type eps0=8.8542e-12; //s2.C2/kg/m3
+const value_type cVfl=e0/(4*pi*eps0);
+const int V=30.; //V voltage applique 
+
+const value_type rNP=1.e-9; //m rayon initial des NP
+const value_type qNP=0.; //C charge initiale des NP
+const value_type nNP=0.;//2.e15; //m-3 densite des NP
+
+const value_type vSi=(4./3.)*pi*pow(1.36e-10,3); //volume d'un atome de Si pour densite solide 2.33 g
+const value_type rate=C/n_SiH4_ini; //taux d'injection et d'evacuation
 
 struct Condition  // condition sur la bissection
 {
@@ -70,11 +83,51 @@ struct ddriv_sys  // structure qui vient calculer les equations differentielles
     /*0=e, 1=Armet, 2=SiH3-, 3=SiH2-, 4=SiH3+, 5=SiH4, 6=SiH3,
     7=H, 8=SiH2, 9=H2, 10=H2+, 11=Si2H5, 12=Si2H2, 13=Si2H4-,
     14=Si2H6, 15=Si2H3-, 16=Si2H5-, 17=SiH-, 18=SiH, 19=Si, 20=Arp, 21=NP*/
+    value_type dpp= n[4]+n[10]+n[20];
+    value_type dnn= n[0] + n[2] + n[3] + n[13] + n[15] + n[16] + n[17];
+    value_type ratep = rate *dnn/dpp; //pour que les charges sortent par paires = et -
+    value_type Vfl=cVfl*n[22]/n[21];//V potentiel flottant e*qNP / 4 pi eps0 rNP
+    value_type sNP=pi*pow(n[21],2); //surface de la NP
+    state_type DA(Nbr_espece, 0.0);  // vecteur de diffusion ambipolaire en m2/s
+ //if (Vfl<0.){
+	       value_type facte=sNP*exp(Vfl/Te); //qNP<0 
+	       value_type factn=sNP*exp(Vfl/Tg);
+	       value_type factp=sNP*(1.-Vfl/Tg);/*}
+ else { facte=sNP*(1.+Vfl/Te); //else qNP>0
+	      factn=sNP*(1.+Vfl/Tg);
+	      factp=sNP*exp(-Vfl/Tg);}*/
+    // calcul des coefficients pour la diffusion ambipolaire
+    value_type n_mu = n[0] * mu[0] + n[4] * mu[4] + n[10] * mu[10] +
+                      n[20] * mu[20];
+    value_type n_DL = -n[0] * DL[0] + n[4] * DL[4] +
+                      n[10] * DL[10] + n[20] * DL[20];
 
-    value_type dSi = n[2] + n[3] + n[4] + n[5] + n[6] + n[8] + 2. * n[11] +
+    // diffusion ambipolaire
+    DA[0] = (DL[0] + mu[0] * n_DL / n_mu) ;  // s-1
+    DA[1] = DL[1] ;
+    DA[4] = (DL[4] - mu[4] * n_DL / n_mu) ;
+    DA[10] = (DL[10] - mu[10] * n_DL / n_mu);
+    DA[20] = (DL[20] - mu[20] * n_DL / n_mu);
+
+//chargement des NP
+value_type ffe=facte*vth[0]*n[0];
+value_type ffn2=factn*vth[2]*n[2];
+value_type ffn3=factn*vth[3]*n[3];
+value_type ffp4=factp*vth[4]*n[4];
+value_type ffp10=factp*vth[10]*n[10];
+value_type ffn13=factn*vth[13]*n[13];
+value_type ffn15=factn*vth[15]*n[15];
+value_type ffn16=factn*vth[16]*n[16];
+value_type ffn17=factn*vth[17]*n[17];
+value_type ffp20=factp*vth[20]*n[20];
+
+value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
+
+
+    /*value_type dSi = n[2] + n[3] + n[4] + n[5] + n[6] + n[8] + 2. * n[11] +
                      2. * n[12] + 2. * n[13] + 2. * n[14] + 2. * n[15] +
                      2. * n[16] + n[17] + n[18] +
-                     n[19];  // somme de tous les atomes de si
+                     n[19];  // somme de tous les atomes de si*/
 
     for (int k = 0; k < Nbr_espece; k++) {
       dndt[k] = 0;  // on initialise les equations a zero
@@ -139,14 +192,80 @@ struct ddriv_sys  // structure qui vient calculer les equations differentielles
       dndt[5]=dndt[5]+C; //insertion de SiH4 dans le reacteur
       dndt[9]=dndt[9]+DA[10]*n[10]+DA[4]*n[4]; // H2+ + e -> H2 sur paroi //SiH3+
       + e -> SiH + H2 sur paroi   dndt[18]=dndt[18]+DA[4]*n[4]; //SiH3+ + e ->   SiH
-      + H2sur paroi*/
+      + H2sur paroi*/ 
+    // introduction de la diffusion
+    for (int a = 0; a < Nbr_espece; a++) {
+
+      if (a == 0 or a == 1 or a == 4 or a == 10 or a == 20) {dndt[a] = dndt[a] - DA[a] * n[a];}
+      if (a!=4 or a!=10 or a<20){dndt[a]=dndt[a]-rate*n[a];}//pompe sur les especes non +
+      //if (a==4 or a==10 or a==20){dndt[a]=dndt[a]-ratep*n[a];}//pompe sur les especes +
+    }  // diffusion
+
+
+ /*  dndt[5] = dndt[5] + C;  // insertion de SiH4 dans le reacteur
+    dndt[9] = dndt[9] + DA[10] * n[10] + DA[4] * n[4];
+    // H2+ + e -> H2 sur paroi
+    //SiH3+ + e -> SiH + H2 sur paroi
+    dndt[18] = dndt[18] + DA[4] * n[4];  // SiH3+ + e ->  SiH + H2sur paroi*/
+
+    dndt[0]=dndt[0]-ffe*nNP;
+    dndt[1]=dndt[1]-sNP*vth[1]*nNP*n[1];
+    dndt[2]=dndt[2]-ffn2*nNP;
+    dndt[3]=dndt[3]-ffn3*nNP;
+    dndt[4]=dndt[4]-ffp4*nNP;
+    dndt[5]=dndt[5]-ccol*coll[5]*n[5]
+		+C;//insertion de SiH4 dans le reacteur
+    dndt[6]=dndt[6]-ccol*coll[6]*n[6] ;   
+		//+DA_[4]*n[4];
+    dndt[7]=dndt[7]+(ffn2+ffp4+ffn15+ffn16+ffn17)*nNP
+		+ccol*(coll[6]*n[6]+coll[11]*n[11]+coll[18]*n[18]);
+		//+0.3*DA_[4]*n[4];//SiH3+ + e -> Si + H + H2 sur paroi
+    dndt[8]=dndt[8]-ccol*coll[8]*n[8];
+		//+DA_[4]*n[4];//SiH3+ + e -> SiH2 + H sur paroi
+    dndt[9]=dndt[9]+DA[10]*n[10]// H2+ + e -> H2 sur paroi 
+		+DA[4]*n[4] //SiH3+ + e -> SiH + H2, Si + H + H2 sur paroi
+		+(ffn2+ffn3+ffp4+ffp10+2.*ffn13+ffn15+2.*ffn16)*nNP
+		+ccol*(2.*coll[5]*n[5]+coll[6]*n[6]+coll[8]*n[8]+2.*coll[11]*n[11]
+			+coll[12]*n[12]+3.*coll[14]*n[14]);
+    dndt[10]=dndt[10]-ffp10*nNP;
+    dndt[11]=dndt[11]-ccol*coll[11]*n[11];
+    dndt[12]=dndt[12]-ccol*coll[12]*n[12];
+    dndt[13]=dndt[13]-ffn13*nNP;
+    dndt[14]=dndt[14]-ccol*coll[14]*n[14];
+    dndt[15]=dndt[15]-ffn15*nNP;
+    dndt[16]=dndt[16]-ffn16*nNP;
+    dndt[17]=dndt[17]-ffn17*nNP;
+    dndt[18]=dndt[18]+DA[4]*n[4]//SiH3+ + e ->  SiH + H2 sur paroi
+		-ccol*coll[18]*n[18];
+    dndt[19]=dndt[19]-ccol*coll[19]*n[19];
+		//+0.3*DA_[4]*n[4];//SiH3+ + e ->  Si + H + H2 sur paroi
+    dndt[20]=dndt[20]-ffp20*nNP;
+
+    //Collage dR/dt sur les NP:
+    dndt[21]=dndt[21] +coll[5]*n[5] +coll[6]*n[6] +coll[8]*n[8]
+		+2.*coll[11]*n[11] +2.*coll[12]*n[12]
+		+2.*coll[14]*n[14] +coll[18]*n[18] +coll[19]*n[19]
+		+(ffn2 +ffn3 +2.*ffn13 +2.*ffn15 +2.*ffn16 +ffn17 +ffp4)*vSi/sNP;
+
+    // Charge des NP par OML: 
+    dndt[22]=dndt[22]-ffe -ffn2 -ffn3 -ffn13 -ffn15 -ffn16 -ffn17
+		+ffp4 +ffp10 +ffp20;
+
+    // Densite des NP:
+    dndt[23]=dndt[23] + dndt[13] +dndt[16];
+
   }
-  /*state_type n;*/
+  state_type n;
   value_type Te;
+  value_type DP;
   int p1, p2, g1, g2, g3, g4;
   value_type Tp, Tx, Tj;
   matrix_type Tab;
   state_type Kt;
+  state_type DL;
+  state_type mu;
+  state_type coll;
+  state_type vth;
 };
 // define a global for sys
 ddriv_sys global_sys;
@@ -164,7 +283,38 @@ inline void g(int* n, double* t, double* yv, int* iroot) {}
 struct etemperature {
   value_type operator()(value_type const& Te)
 
-  {
+  {  // calcul des coefficients pour la diffusion ambipolaire
+    value_type n_mu = mu[0] * n[0] + n[4] * mu[4] + n[10] * mu[10] +
+                      n[20] * mu[20];
+    value_type n_DL = -n[0] * DL[0] + n[4] * DL[4] +
+                      n[10] * DL[10] + n[20] * DL[20];
+
+    // diffusion ambipolaire
+    value_type Diffe = (DL[0] + mu[0] * n_DL / n_mu) ;  // s-1
+
+
+  value_type Vfl=cVfl*n[22]/n[21];//V potentiel flottant e*qNP / 4 pi eps0 rNP
+  value_type sNP=pi*pow(n[21],2); //surface de la NP
+  //if (Vfl<=0.){ 
+  value_type Fe=sNP*vth[0]*exp(Vfl/Te);
+              /*}
+  else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
+
+    return -DP/Te
+    	+k(0,Te)*n_Ar*15.76 +k(1,Te)*n_Ar*11.76+ k(2,Te)*n[1]*4.
+    	-k(4,Te)*n[1]*11.76
+    	+k(5,Te)*n[5]*10.68 +k(6,Te)*n[5]*10.68
+	+k(7,Te)*n[5]*8.29 + k(8,Te)*n[5]*8.29
+    	+k(9,Te)*n[5]*12
+	+k(10,Te)*n[6]*1.94 + k(11,Te)*n[6]*1.30 + k(12,Te)*n[2]*1.16
+    	+k(13,Te)*n[3]*1.16 + k(14,Te)*n[8]*1.5*Te + k(15,Te)*n[9]*10.09
+    	+k(16,Te)*n[9]*16.05 +k(42,Te)*n[6]*1.5*Te +k(43,Te)*n[18]*1.5*Te
+    	+k(44,Te)*n[17]*1.25
+	+Diffe*1.5*Te /*perte sur les parois*/
+	+Fe*nNP*1.5*Te /*pertes sur les NP*/
+	+rate*1.5*Te ;/*perte taux injection evacuation*/
+
+/*
     return -DP / n[0] + k(0, Te) * n_Ar * 16.14 + k(1, Te) * n_Ar * 12.31 +
            k(2, Te) * n[1] * 5.39 - k(3, Tg) * n[1] * n[1] * 8.48 -
            k(4, Te) * n[1] * 12.31 + k(5, Te) * n[5] * 10.68 +
@@ -174,11 +324,14 @@ struct etemperature {
            k(12, Te) * n[2] * 1.16 + k(13, Te) * n[3] * 1.16 +
            k(14, Te) * n[8] * 1.5 * Te + k(15, Te) * n[9] * 10.09 +
            k(16, Te) * n[9] * 16.05 + k(42, Te) * n[6] * 1.5 * Te +
-           k(43, Te) * n[18] * 1.5 * Te + k(44, Te) * n[17] * 1.25;
+           k(43, Te) * n[18] * 1.5 * Te + k(44, Te) * n[17] * 1.25;*/
   }
 
   state_type n;
-
+  state_type DL;
+  state_type mu;
+  state_type vth;
+  value_type DP;
   // fonction pour calculer les K en faisant
   // varier Te dans la bissection
   value_type k(int ind,
@@ -193,15 +346,6 @@ struct etemperature {
 };
 
 // ecriture des densite dans un fichier
-void write_density(const value_type t, const value_type Te,
-                   const state_type& n) {
-  cout << t << '\t' << Te << '\t' << n[0] << '\t' << n[1] << '\t' << n[2]
-       << '\t' << n[3] << '\t' << n[4] << '\t' << n[5] << '\t' << n[6] << '\t'
-       << n[7] << '\t' << n[8] << '\t' << n[9] << '\t' << n[10] << '\t' << n[11]
-       << '\t' << n[12] << '\t' << n[13] << '\t' << n[14] << '\t' << n[15]
-       << '\t' << n[16] << '\t' << n[17] << '\t' << n[18] << '\t' << n[19]
-       << '\t' << n[20] << '\t' << n[13] + n[16] << endl;
-}
 
 void write_density(ofstream& fp, const value_type t, const value_type Te,
                    const state_type &n) {
@@ -239,10 +383,10 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  value_type Te = 0.7;  // valeur initiale de la temperature
+  value_type Te = 3.;  // valeur initiale de la temperature
 
   // legende
-  cout << "t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
+  outfile << "#t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
        << "SiH3m" << '\t' << "SiH2" << '\t' << "SiH3p" << '\t' << "SiH4" << '\t'
        << "SiH3" << '\t' << "H" << '\t' << "SiH2" << '\t' << "H2" << '\t'
        << "H2p" << '\t' << "Si2H5" << '\t' << "Si2H2" << '\t' << "Si2H4m"
@@ -253,14 +397,52 @@ int main(int argc, char** argv) {
   // vecteur de densite et conditions initiales
   state_type n_ini(Nbr_espece, 0.0);
   n_ini[0] = 1.e16;
-  n_ini[1] = 1.e10;
+  n_ini[1] = 1.e16;
   n_ini[5] = n_SiH4_ini;
-  n_ini[20] = 1.e16;
-  n_ini[4] = n_ini[0] - n_ini[20];
+  n_ini[20] =n_ini[0]-n_ini[4];
+  n_ini[21]=rNP;
+  n_ini[22]=qNP;
 
+//determination du collage sur les NP
+state_type coll(Nbr_espece,0.0); //vecteur collage
+state_type vth(Nbr_espece,0.0); //vecteur vitesse thermique
+
+value_type cvth=1.56e4*sqrt(Tg); //NRL * sqrt (8/pi)
+
+	vth[0]=6.69e5*sqrt(Te);
+	vth[1]=cvth/sqrt(40.);
+	vth[2]=cvth/sqrt(31.);
+	vth[3]= cvth/sqrt(30.);
+	vth[4]= cvth/sqrt(33.);
+	vth[5]= cvth/sqrt(34.);
+	vth[6]= cvth/sqrt(33.);
+	vth[7]= cvth/sqrt(1.);
+	vth[8]= cvth/sqrt(30.);
+	vth[9]= cvth/sqrt(2.);
+	vth[10]= cvth/sqrt(2.);
+	vth[11]= cvth/sqrt(61.);
+	vth[12]= cvth/sqrt(58.);
+	vth[13]= cvth/sqrt(60.);
+	vth[14]= cvth/sqrt(62.);
+	vth[15]= cvth/sqrt(59.);
+	vth[16]= cvth/sqrt(61.);
+	vth[17]= cvth/sqrt(29.);
+	vth[18]= cvth/sqrt(29.);
+	vth[19]= cvth/sqrt(28.);
+	vth[20]= cvth/sqrt(40.);
+
+	coll[5]= 1.e-5*vSi*vth[5];    // m4/s  coefficients de collage de Le Picard
+	coll[6]= 0.045*vSi*vth[6];
+	coll[8]= 0.8*vSi*vth[8];
+	coll[11]= 1.e-5*vSi*vth[11]; // pas dans Le Picard
+	coll[12]= 1.e-5*vSi*vth[12] ;// pas dans Le Picard
+	coll[14]= 1.e-5*vSi*vth[14]; 
+	coll[18]= 0.95*vSi*vth[18];
+	coll[19]= 1.0*vSi*vth[19]; // pas dans Le Picard
+  
   state_type DL(Nbr_espece, 0.0);  // vecteur de diffusion libre en m2/s
   state_type mu(Nbr_espece, 0.0);  // vecteur de mobilite en m2/(V.s)
-  state_type DA(Nbr_espece, 0.0);  // vecteur de diffusion ambipolaire en m2/s
+
 
   state_type Kt(jmax, 0.0);
 
@@ -295,16 +477,24 @@ int main(int argc, char** argv) {
   DL[20] = 4.e-3 / (pression * 760.);  // valeur de benjamin
   mu[20] = DL[20] / Tg;
 
+  value_type DP=0.5*DL[0]*pow((V/L),2.);
+
+for (int i=0; i < Nbr_espece; i++)
+	{
+		DL[i]=DL[i]*diff;
+		mu[i]=mu[i]*diff;
+	}
+
   // variable du temps
   double t = 0.0;
-  value_type dt = 1.0e-8;
-  value_type Tmax = 20.e-3;
+  value_type dt = 10.0e-10;
+  value_type Tmax = 10e-5;//20.e-3;
   value_type NT = Tmax / dt;
 
   // variable pour la bissection
   value_type min = Tg;
-  value_type max = 10.0;
-  boost::uintmax_t max_iter = 500;
+  value_type max = 1000.;
+  boost::uintmax_t max_iter = 1000;
   eps_tolerance<value_type> tol(30);
 
   state_type n_new(Nbr_espece, 0.0);  // initialisation du vecteur densite
@@ -320,6 +510,14 @@ int main(int argc, char** argv) {
   // set Tab in etemp
   etemp.Tab = Tab;
 
+  //assigne les vecteurs Dl  mu et vth a la fonction etemp
+  etemp.DL=DL;
+  etemp.mu=mu;
+  etemp.vth=vth;
+
+  //assigne DP a etemp
+  etemp.DP=DP;
+
   // premier calcul de Te
   pair<value_type, value_type> pair_Te =
       toms748_solve(etemp, min, max, tol, max_iter);
@@ -330,6 +528,14 @@ int main(int argc, char** argv) {
   // global_sys.n=n_ini;
   global_sys.Tab = Tab;
   global_sys.Kt = Kt;
+
+  //assignation a global sys de DP vth, mu, DL et coll
+  global_sys.n=n_ini;
+  global_sys.DP=DP;
+  global_sys.vth=vth;
+  global_sys.mu=mu;
+  global_sys.DL=DL;
+  global_sys.coll=coll;
   /*
   //verification du coefficient d'arrhenius et de la temperature
   for (int j=0;j<jmax;j++)
@@ -364,19 +570,12 @@ int main(int argc, char** argv) {
 
   int ierflg;
 
-  for (int i = 1; i <= NT + 1; i++) {
-    // calcul des coefficients pour la diffusion ambipolaire
-    value_type n_mu = n_new[0] * mu[0] + n_new[4] * mu[4] + n_new[10] * mu[10] +
-                      n_new[20] * mu[20];
-    value_type n_DL = -n_new[0] * DL[0] + n_new[4] * DL[4] +
-                      n_new[10] * DL[10] + n_new[20] * DL[20];
+  for (int i = 0; i <= NT + 1; i++) {
 
-    // diffusion ambipolaire
-    DA[0] = (DL[0] + mu[0] * n_DL / n_mu) * diff;  // s-1
-    DA[1] = DL[1] * diff;
-    DA[4] = (DL[4] - mu[4] * n_DL / n_mu) * diff;
-    DA[10] = (DL[10] - mu[10] * n_DL / n_mu) * diff;
-    DA[20] = (DL[20] - mu[20] * n_DL / n_mu) * diff;
+    mu[1]=DL[1]/Te; //30./(pression*760.)     m2/(V.s)
+    vth[1]=6.69e-5*sqrt(Te); // m/s  vitesse thermique electrons
+
+
 
     global_sys.Te = Te;
 
