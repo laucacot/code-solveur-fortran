@@ -10,20 +10,11 @@
 #define BOOST_UBLAS_NDEBUG
 #include <stdlib.h>
 #include <time.h>
-// #include <boost/array.hpp>
-// #include <boost/math/tools/roots.hpp>
-// #include <boost/numeric/ublas/matrix.hpp>
-// #include <boost/numeric/ublas/vector.hpp>
 #include <boost/array.hpp>
-#include <boost/numeric/odeint.hpp>
-#include <exception>
+#include <boost/math/tools/roots.hpp>
+#include <boost/numeric/ublas/matrix.hpp>
+#include <boost/numeric/ublas/vector.hpp>
 #include <fstream>
-#include <string>
-//#include <utility>
-
-#include <algorithm>
-#include <functional>
-#include <utility>
 
 extern "C" {
 void ddriv2_(int* n, double* tv, double* yv,
@@ -37,7 +28,7 @@ using namespace std;
 using namespace boost::math::tools;
 
 // type definitions
-using namespace boost::numeric::odeint;
+using namespace boost::numeric;
 typedef boost::numeric::ublas::vector<double> state_type;
 typedef boost::numeric::ublas::matrix<double> matrix_type;
 
