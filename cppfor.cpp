@@ -481,15 +481,15 @@ cerr<<n_SiH4_ini<<endl;
   double t = 0.0;
 
   double dt = 1.e-8;
-  double Tmax = 20.e-6;//20.e-3;
+  double Tmax = 20.e-3;//20.e-3;
   double NT = Tmax / dt;
 
 
   // variable pour la bissection
   double min = Tg;
-  double max = 1000.;
-  boost::uintmax_t max_iter = 1000;
-  eps_tolerance<double> tol(30);
+  double max = 100.;
+  boost::uintmax_t max_iter = 100;
+  eps_tolerance<double> tol(6);
 
   state_type n_new(Nbr_espece, 0.0);  // initialisation du vecteur densite
   n_new = n_ini;
@@ -565,7 +565,7 @@ cerr<<n_SiH4_ini<<endl;
 
   for (int i = 0; i <= NT + 1; i++) {
     mu[1] = DL[1] / Te;           // 30./(pression*760.)     m2/(V.s)
-    vth[1] = 6.69e-5 * sqrt(Te);  // m/s  vitesse thermique electrons
+    vth[1] = 6.69e5 * sqrt(Te);  // m/s  vitesse thermique electrons
  
     global_sys.Te = Te;
 
