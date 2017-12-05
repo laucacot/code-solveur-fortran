@@ -488,7 +488,7 @@ for (int i=0; i < Nbr_espece; i++)
   // variable du temps
   double t = 0.0;
   value_type dt = 10.0e-10;
-  value_type Tmax = 10e-5;//20.e-3;
+  value_type Tmax = 20e-3;//20.e-3;
   value_type NT = Tmax / dt;
 
   // variable pour la bissection
