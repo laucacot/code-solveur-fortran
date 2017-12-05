@@ -47,7 +47,7 @@ const value_type n_Ar = pression * 2.69e25;  // densite d'argon en m-3
 const value_type n_SiH4_ini = n_Ar / 30.;    // densite de SiH4 initiale
 const int Nbr_espece = 24;
 //const value_type DP =1.e23;  // eV/s.m3 puissance totale du systeme par unite de volume imposee
-const float C = 1.35e21;  // m-3/s taux d'injection du SiH4 dans le réacteur
+const float C = 2.e21;  // m-3/s taux d'injection du SiH4 dans le réacteur
 const value_type Tg = 0.02758;  // eV soit 320 K
 
 
@@ -132,7 +132,7 @@ value_type k7 (value_type Te) //K7 SiH4 + e -> SiH2 + 2H + e
 value_type k8 (value_type Te) //K8 SiH4 + e -> SiH3- + H
 {
     value_type K8;
-    K8=3.77E-9*pow((Te),-1.627)*exp(-(8.29)/(Te));
+    K8=3.77E-9*pow((Te),-1.63)*exp(-(8.29)/(Te));
     return K8;
 
 }
@@ -140,7 +140,7 @@ value_type k8 (value_type Te) //K8 SiH4 + e -> SiH3- + H
 value_type k9 (value_type Te) //K9 SiH4 + e -> SiH2- + 2H
 {
     value_type K9;
-    K9=3.77E-9*pow((Te),-1.627)*exp(-(8.29)/(Te));
+    K9=3.77E-9*pow((Te),-1.63)*exp(-(8.29)/(Te));
     return K9;
 
 }
@@ -272,7 +272,7 @@ value_type k25 (value_type Tg) //K25 SiH2 + H2 -> SiH4
 value_type k26 (value_type Tg) //K26 SiH2  -> Si + H2
 {
     value_type K26;
-    K26=1.51E-9*pow((Tg),1.76)*exp(-(1.66)/(Tg));
+    K26=1.51E-9*pow((Tg),1.658)*exp(-(1.66)/(Tg));
     return K26;
 }
 
@@ -307,7 +307,7 @@ value_type k30 (value_type Tg) //K30 SiH3-> SiH + H2
 value_type k31 (value_type Tg) //K31 SiH3 + H -> SiH2 + H2
 {
     value_type K31;
-    K31=2.49E-17*exp(-(0.11)/(Tg));
+    K31=2.49E-17*exp(-(0.1084)/(Tg));
     return K31;
 }
 
@@ -335,7 +335,7 @@ value_type k34 (value_type Tg) //K34 SiH3- +H2+ -> SiH3 + H2
 value_type k35 (value_type Tg) //K35 SiH3- + SiH3+ -> Si2H6
 {
     value_type K35;
-    K35= 2.11e-20*0.5 ;
+    K35= 2.11e-20;
     return K35;
 }
 
@@ -432,12 +432,28 @@ struct ddriv_sys  // structure qui vient calculer les equations differentielles
     /*0=e, 1=Armet, 2=SiH3-, 3=SiH2-, 4=SiH3+, 5=SiH4, 6=SiH3,
     7=H, 8=SiH2, 9=H2, 10=H2+, 11=Si2H5, 12=Si2H2, 13=Si2H4-,
     14=Si2H6, 15=Si2H3-, 16=Si2H5-, 17=SiH-, 18=SiH, 19=Si, 20=Arp, 21=NP*/
-    value_type dpp= n[4]+n[10]+n[20];
+     value_type dpp= n[4]+n[10]+n[20];
     value_type dnn= n[0] + n[2] + n[3] + n[13] + n[15] + n[16] + n[17];
     value_type ratep = rate *dnn/dpp; //pour que les charges sortent par paires = et -
+
+   value_type n_mu = n[0] * mu[0] + n[4] * mu[4] + n[10] * mu[10] +
+                      n[20] * mu[20];
+    value_type n_DL = -n[0] * DL[0] + n[4] * DL[4] +
+                      n[10] * DL[10] + n[20] * DL[20];
+
+value_type rr=n_DL/n_mu;
+    state_type DA(Nbr_espece, 0.0);  // vecteur de diffusion ambipolaire en m2/s
+    // diffusion ambipolaire
+    DA[0] = DL[0] + mu[0] * rr ;  // s-1
+    DA[1] = DL[1] ;
+    DA[4] = DL[4] - mu[4] *rr ;
+    DA[10] = DL[10] - mu[10] * rr;
+    DA[20] = DL[20] - mu[20] * rr;
+
+
     value_type Vfl=cVfl*n[22]/n[21];//V potentiel flottant e*qNP / 4 pi eps0 rNP
     value_type sNP=pi*pow(n[21],2); //surface de la NP
-    state_type DA(Nbr_espece, 0.0);  // vecteur de diffusion ambipolaire en m2/s
+
  //if (Vfl<0.){
 	       value_type facte=sNP*exp(Vfl/Te); //qNP<0 
 	       value_type factn=sNP*exp(Vfl/Tg);
@@ -446,17 +462,9 @@ struct ddriv_sys  // structure qui vient calculer les equations differentielles
 	      factn=sNP*(1.+Vfl/Tg);
 	      factp=sNP*exp(-Vfl/Tg);}*/
     // calcul des coefficients pour la diffusion ambipolaire
-    value_type n_mu = n[0] * mu[0] + n[4] * mu[4] + n[10] * mu[10] +
-                      n[20] * mu[20];
-    value_type n_DL = -n[0] * DL[0] + n[4] * DL[4] +
-                      n[10] * DL[10] + n[20] * DL[20];
 
-    // diffusion ambipolaire
-    DA[0] = (DL[0] + mu[0] * n_DL / n_mu) ;  // s-1
-    DA[1] = DL[1] ;
-    DA[4] = (DL[4] - mu[4] * n_DL / n_mu) ;
-    DA[10] = (DL[10] - mu[10] * n_DL / n_mu);
-    DA[20] = (DL[20] - mu[20] * n_DL / n_mu);
+
+
 
 //chargement des NP
 value_type ffe=facte*vth[0]*n[0];
@@ -470,7 +478,7 @@ value_type ffn16=factn*vth[16]*n[16];
 value_type ffn17=factn*vth[17]*n[17];
 value_type ffp20=factp*vth[20]*n[20];
 
-value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
+
 
 
 
@@ -522,6 +530,8 @@ value_type rr44=k44(Te)*n[18]*n[0];
 value_type rr45=k45(Te)*n[17]*n[0];
 value_type rr46=k46(Tg)*n[3]*n[18];
 value_type rr47=k47(Tg)*n[17]*n[10];
+
+value_type ccol=nNP*4.*sNP/vSi; //4*sNP=surface de la NP
 
 dndt[0]=
        rr1 + rr3 + rr4 - rr8 - rr9 + rr10
@@ -709,7 +719,7 @@ struct etemperature {
                       n[10] * DL[10] + n[20] * DL[20];
 
     // diffusion ambipolaire
-    value_type Diffe = (DL[0] + mu[0] * n_DL / n_mu) ;  // s-1
+    value_type Diffe = DL[0] + mu[0] * n_DL / n_mu ;  // s-1
 
 
   value_type Vfl=cVfl*n[22]/n[21];//V potentiel flottant e*qNP / 4 pi eps0 rNP
@@ -838,7 +848,7 @@ value_type cvth=1.56e4*sqrt(Tg); //NRL * sqrt (8/pi)
   state_type mu(Nbr_espece, 0.0);  // vecteur de mobilite en m2/(V.s)
 
 
-  state_type Kt(jmax, 0.0);
+
 
   // Coefficients de diffusion libres de Chapman-Enskog
   value_type D_mol = 2.;  // diametre de (molecule + argon)/2 en A
@@ -961,7 +971,7 @@ for (int i=0; i < Nbr_espece; i++)
   for (int i = 0; i <= NT + 1; i++) {
 
     mu[1]=DL[1]/Te; //30./(pression*760.)     m2/(V.s)
-    vth[1]=6.69e-5*sqrt(Te); // m/s  vitesse thermique electrons
+    vth[1]=6.69e5*sqrt(Te); // m/s  vitesse thermique electrons
 
 
 
