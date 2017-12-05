@@ -587,29 +587,29 @@ int main(int argc, char** argv) {
     //     t += dt;
     n_ini = n_new;  // update
   }
-// 
-//   double charge = (n_new[20] + n_new[4] + n_new[10] - n_new[0] - n_new[2] -
-//                    n_new[3] - n_new[13] - n_new[15] - n_new[16] - n_new[17]) /
-//                   (n_new[20] + n_new[4] + n_new[10]);
-// 
-//   cerr << "charge/dArp=" << charge << endl;
-// 
-//   double Si =
-//       (n_new[2] + n_new[3] + n_new[4] + n_new[13] * 2 + 2 * n_new[15] +
-//        n_new[16] * 2 + n_new[17] + n_new[5] + n_new[6] + n_new[8] + n_new[18] +
-//        2 * n_new[11] + n_new[19] + n_new[12] * 2 + n_new[14] * 2) /
-//       n_SiH4_ini;
-// 
-//   cerr << "Si=" << Si << endl;
-// 
-//   double H =
-//       (3 * n_new[2] + 2 * n_new[3] + 3 * n_new[4] + 2 * n_new[10] +
-//        4 * n_new[13] + 3 * n_new[15] + 5 * n_new[16] + n_new[17] +
-//        4 * n_new[5] + 3 * n_new[6] + n_new[7] + 2 * n_new[8] + 2 * n_new[9] +
-//        n_new[18] + 5 * n_new[11] + 2 * n_new[12] + 6 * n_new[14]) /
-//       (4 * n_SiH4_ini);
-// 
-//   cerr << "H=" << H << endl;
+
+  double charge = (n_new[20] + n_new[4] + n_new[10] - n_new[0] - n_new[2] -
+                   n_new[3] - n_new[13] - n_new[15] - n_new[16] - n_new[17]) /
+                  (n_new[20] + n_new[4] + n_new[10]);
+
+  cerr << "charge/dArp=" << charge << endl;
+
+  double Si =
+      (n_new[2] + n_new[3] + n_new[4] + n_new[13] * 2 + 2 * n_new[15] +
+       n_new[16] * 2 + n_new[17] + n_new[5] + n_new[6] + n_new[8] + n_new[18] +
+       2 * n_new[11] + n_new[19] + n_new[12] * 2 + n_new[14] * 2) /
+      n_SiH4_ini;
+
+  cerr << "Si=" << Si << endl;
+
+  double H =
+      (3 * n_new[2] + 2 * n_new[3] + 3 * n_new[4] + 2 * n_new[10] +
+       4 * n_new[13] + 3 * n_new[15] + 5 * n_new[16] + n_new[17] +
+       4 * n_new[5] + 3 * n_new[6] + n_new[7] + 2 * n_new[8] + 2 * n_new[9] +
+       n_new[18] + 5 * n_new[11] + 2 * n_new[12] + 6 * n_new[14]) /
+      (4 * n_SiH4_ini);
+
+  cerr << "H=" << H << endl;
 
   return 0;
 }
