@@ -1,427 +1,429 @@
 
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <string>
 //#include <boost/serialization/array_wrapper.hpp>
-
-#include <vector>
-// Optimization
-#define BOOST_UBLAS_NDEBUG
-#include <stdlib.h>
-#include <time.h>
-#include <boost/array.hpp>
-#include <boost/numeric/odeint.hpp>
 #include <exception>
 #include <fstream>
-#include <string>
-#include <utility>
+#include <vector>
+// Optimization
+#define NDEBUG
+#define BOOST_UBLAS_NDEBUG
+#include <boost/array.hpp>
+#include <boost/math/tools/roots.hpp>
+#include <boost/numeric/ublas/matrix.hpp>
+#include <boost/numeric/ublas/vector.hpp>
 
-#include <algorithm>
-#include <functional>
-#include <utility>
+
 
 extern "C" {
 void ddriv2_(int* n, double* tv, double* yv,
              void(f)(int* n, double* t, double* yv, double* ydotv),
              double* tout, int* mstate, int* nroot, double* eps, double* ewt,
              int* mint, double* work, int* lenw, double* iwork, int* leniw,
-             void(g)(int* n, double* t, double* yv, int* iroot), int* ierflg);
+             void(g)(int* n, double* t, double* yv, double* iroot), int* ierflg);
 };
 
 using namespace std;
-using namespace boost::numeric::odeint;
+using namespace boost::numeric;
 using namespace boost::math::tools;
 
 // type definitions
-typedef double value_type;  // or typedef float value_type;
-typedef boost::numeric::ublas::vector<value_type> state_type;
-typedef boost::numeric::ublas::matrix<value_type> matrix_type;
-typedef rosenbrock4<value_type> stepper_type;
+typedef boost::numeric::ublas::vector<double> state_type;
+typedef boost::numeric::ublas::matrix<double> matrix_type;
 
 // constantes
-const value_type pression = 0.1 / 760;  // atm soit 0.1 torr et 13 pascal
-const value_type L = 3.e-2;             // distance entre deux plaques en m
-const value_type pi = M_PI;
-const value_type diff = pow((pi / L), 2.) * 2.;  // facteur pour la diffusion
-const value_type n_Ar = pression * 2.69e25;      // densite d'argon en m-3
-const value_type n_SiH4_ini = n_Ar / 30.;        // densite de SiH4 initiale
+const double pression = 0.1 / 760;  // atm soit 0.1 torr et 13 pascal
+const double L = 3.e-2;             // distance entre deux plaques en m
+const double pi = M_PI;
+const double diff = pow((pi / L), 2.) * 2.;  // facteur pour la diffusion
+const double n_Ar = pression * 2.69e25;      // densite d'argon en m-3
+const double n_SiH4_ini = n_Ar / 30.;        // densite de SiH4 initiale
 const int Nbr_espece = 24;
-// const value_type DP =1.e23;  // eV/s.m3 puissance totale du systeme par unite
+// const double DP =1.e23;  // eV/s.m3 puissance totale du systeme par unite
 // de volume imposee
-const float C = 2.e21;  // m-3/s taux d'injection du SiH4 dans le réacteur
-const value_type Tg = 0.02758;  // eV soit 320 K
+const double C = 2.e21;  // m-3/s taux d'injection du SiH4 dans le réacteur
+const double Tg = 0.02758;  // eV soit 320 K
 
 const int Nbr_K = 47;  // nombre d'equation dans le fichier
 const int jmax = Nbr_K;
 const int imax = 9;  // nombre de colonnes
 
-const value_type e0 = 1.6022e-19;    // coulomb
-const value_type eps0 = 8.8542e-12;  // s2.C2/kg/m3
-const value_type cVfl = e0 / (4 * pi * eps0);
-const int V = 30.;  // V voltage applique
+const double e0 = 1.6022e-19;    // coulomb
+const double eps0 = 8.8542e-12;  // s2.C2/kg/m3
+const double cVfl = e0 / (4 * pi * eps0);
+const double V = 30.;  // V voltage applique
 
-const value_type rNP = 1.e-9;  // m rayon initial des NP
-const value_type qNP = 0.;     // C charge initiale des NP
-const value_type nNP = 0.;     // 2.e15; //m-3 densite des NP
+const double rNP = 1.e-9;  // m rayon initial des NP
+const double qNP = 0.;     // C charge initiale des NP
+const double nNP = 0.;     // 2.e15; //m-3 densite des NP
 
-const value_type vSi =
+const double vSi =
     (4. / 3.) * pi *
     pow(1.36e-10, 3);  // volume d'un atome de Si pour densite solide 2.33 g
-const value_type rate = C / n_SiH4_ini;  // taux d'injection et d'evacuation
+const double rate = C / n_SiH4_ini;  // taux d'injection et d'evacuation
 
 struct Condition  // condition sur la bissection
 {
-  value_type tol = 1.e-9;
-  bool operator()(value_type min, value_type max) {
+  double tol = 1.e-9;
+  bool operator()(double min, double max) {
     return abs(min - max) <= tol;
   }
 };
 
 // calcul des K dependant de Te
 
-value_type k1(value_type Te)  // K1 Ar + e -> Ar+ + 2e
+double k1(double Te)  // K1 Ar + e -> Ar+ + 2e
 {
-  value_type K1;
+  double K1;
   K1 = 7.06E-17 * pow((Te), 0.6) * exp(-(16.14) / (Te));
   return K1;
 }
 
-value_type k2(value_type Te)  // K2 Ar + e -> Ar* + e
+double k2(double Te)  // K2 Ar + e -> Ar* + e
 {
-  value_type K2;
+  double K2;
   K2 = 11.69E-15 * exp(-(12.31) / (Te));
   return K2;
 }
 
-value_type k3(value_type Te)  // K3 Ar* + e -> Ar+ + 2e
+double k3(double Te)  // K3 Ar* + e -> Ar+ + 2e
 {
-  value_type K3;
+  double K3;
   K3 = 124.92E-15 * exp(-(5.39) / (Te));
   return K3;
 }
 
-value_type k4(value_type Te)  // K4 Ar* + Ar* -> Ar + Ar+ + e
+double k4(double Te)  // K4 Ar* + Ar* -> Ar + Ar+ + e
 {
-  value_type K4;
+  double K4;
   K4 = 6.144e-16;
   return K4;
 }
 
-value_type k5(value_type Te)  // K5 Ar* + e -> Ar + e
+double k5(double Te)  // K5 Ar* + e -> Ar + e
 {
-  value_type K5;
+  double K5;
   K5 = 431.89E-18 * pow((Te), 0.74);
   return K5;
 }
 
-value_type k6(value_type Te)  // K6 SiH4 + e -> SiH3 + H + e
+double k6(double Te)  // K6 SiH4 + e -> SiH3 + H + e
 {
-  value_type K6;
+  double K6;
   K6 = 1.83E-9 * pow((Te), -1) * exp(-(10.68) / (Te));
   return K6;
 }
 
-value_type k7(value_type Te)  // K7 SiH4 + e -> SiH2 + 2H + e
+double k7(double Te)  // K7 SiH4 + e -> SiH2 + 2H + e
 {
-  value_type K7;
+  double K7;
   K7 = 8.97E-9 * pow((Te), -1) * exp(-(10.68) / (Te));
   return K7;
 }
 
-value_type k8(value_type Te)  // K8 SiH4 + e -> SiH3- + H
+double k8(double Te)  // K8 SiH4 + e -> SiH3- + H
 {
-  value_type K8;
+  double K8;
   K8 = 3.77E-9 * pow((Te), -1.63) * exp(-(8.29) / (Te));
   return K8;
 }
 
-value_type k9(value_type Te)  // K9 SiH4 + e -> SiH2- + 2H
+double k9(double Te)  // K9 SiH4 + e -> SiH2- + 2H
 {
-  value_type K9;
+  double K9;
   K9 = 3.77E-9 * pow((Te), -1.63) * exp(-(8.29) / (Te));
   return K9;
 }
 
-value_type k10(value_type Te)  // K10 SiH4 + e -> SiH3+ + H + 2e
+double k10(double Te)  // K10 SiH4 + e -> SiH3+ + H + 2e
 {
-  value_type K10;
+  double K10;
   K10 = 2.50E2 * pow((Te), -2.93) * exp(-(24.1) / (Te));
   return K10;
 }
 
-value_type k11(value_type Te)  // K11 SiH3 + e -> SiH2- + H
+double k11(double Te)  // K11 SiH3 + e -> SiH2- + H
 {
-  value_type K11;
+  double K11;
   K11 = 5.71E-9 * pow((Te), -0.5) * exp(-(1.94) / (Te));
   return K11;
 }
 
-value_type k12(value_type Te)  // K12 SiH3 + e -> SiH3+  + 2e
+double k12(double Te)  // K12 SiH3 + e -> SiH3+  + 2e
 {
-  value_type K12;
+  double K12;
   K12 = 2.26E-16 * pow((Te), 0.5) * exp(-(1.30) / (Te));
   return K12;
 }
 
-value_type k13(value_type Te)  // K13 SiH3- + e -> SiH3 + 2e
+double k13(double Te)  // K13 SiH3- + e -> SiH3 + 2e
 {
-  value_type K13;
+  double K13;
   K13 = 3.15E-16 * pow((Te), 0.5) * exp(-(1.16) / (Te));
   return K13;
 }
 
-value_type k14(value_type Te)  // K14 SiH2- + e -> SiH2  + 2e
+double k14(double Te)  // K14 SiH2- + e -> SiH2  + 2e
 {
-  value_type K14;
+  double K14;
   K14 = 3.15E-16 * pow((Te), 0.5) * exp(-(1.16) / (Te));
   return K14;
 }
 
-value_type k15(value_type Te)  // K15 SiH2 + e -> SiH2-
+double k15(double Te)  // K15 SiH2 + e -> SiH2-
 {
-  value_type K15;
+  double K15;
   K15 = 5.71E-16 * pow((Te), -0.5);
   return K15;
 }
 
-value_type k16(value_type Te)  // K16 H2 + e ->  2H + e
+double k16(double Te)  // K16 H2 + e ->  2H + e
 {
-  value_type K16;
+  double K16;
   K16 = 4.73E-14 * pow((Te), -0.23) * exp(-(10.09) / (Te));
   return K16;
 }
 
-value_type k17(value_type Te)  // K17 H2 + e ->  H2+ + 2e
+double k17(double Te)  // K17 H2 + e ->  H2+ + 2e
 {
-  value_type K17;
+  double K17;
   K17 = 1.1E-14 * pow((Te), 0.42) * exp(-(16.05) / (Te));
   return K17;
 }
 
-value_type k18(value_type Tg)  // K18 SiH4 + Ar* -> SiH3 + H + Ar
+double k18(double Tg)  // K18 SiH4 + Ar* -> SiH3 + H + Ar
 {
-  value_type K18;
+  double K18;
   K18 = 1.400e-16;
   return K18;
 }
 
-value_type k19(value_type Tg) {
-  value_type K19;
+double k19(double Tg) {
+  double K19;
   K19 = 2.591e-16;
   return K19;
 }
 
-value_type k20(value_type Tg) {
-  value_type K20;
+double k20(double Tg) {
+  double K20;
   K20 = 99.67e-18;
   return K20;
 }
 
-value_type k21(value_type Tg) {
-  value_type K21;
+double k21(double Tg) {
+  double K21;
   K21 = 9.963e-17;
   return K21;
 }
 
-value_type k22(value_type Tg) {
-  value_type K22;
+double k22(double Tg) {
+  double K22;
   K22 = 6.974e-17;
   return K22;
 }
 
-value_type k23(value_type Tg)  // k23(Tg)%K23 SiH3 + SiH3 -> SiH2 + SiH4
+double k23(double Tg)  // k23(Tg)%K23 SiH3 + SiH3 -> SiH2 + SiH4
 {
-  value_type K23;
+  double K23;
   K23 = 2.99e-17;
   return K23;
 }
 
-value_type k24(value_type Tg)  // K24 SiH4 + SIH3 -> Si2H5 + H2
+double k24(double Tg)  // K24 SiH4 + SIH3 -> Si2H5 + H2
 {
-  value_type K24;
+  double K24;
   K24 = 2.94e-18 * exp(-0.1908 / Tg);
   return K24;
 }
 
-value_type k25(value_type Tg)  // K25 SiH2 + H2 -> SiH4
+double k25(double Tg)  // K25 SiH2 + H2 -> SiH4
 {
-  value_type K25;
+  double K25;
   K25 = 2.e-19;
   return K25;
 }
 
-value_type k26(value_type Tg)  // K26 SiH2  -> Si + H2
+double k26(double Tg)  // K26 SiH2  -> Si + H2
 {
-  value_type K26;
+  double K26;
   K26 = 1.51E-9 * pow((Tg), 1.658) * exp(-(1.66) / (Tg));
   return K26;
 }
 
-value_type k27(value_type Tg)  // K27 SiH4 + H -> H2 + SiH3
+double k27(double Tg)  // K27 SiH4 + H -> H2 + SiH3
 {
-  value_type K27;
+  double K27;
   K27 = 2.44E-22 * pow((Tg), 1.9) * exp(-(0.09) / (Tg));
   return K27;
 }
 
-value_type k28(value_type Tg)  // K28 SiH2 + SiH2 -> Si2H2 + H2
+double k28(double Tg)  // K28 SiH2 + SiH2 -> Si2H2 + H2
 {
-  value_type K28;
+  double K28;
   K28 = 1.08e-15;
   return K28;
 }
 
-value_type k29(value_type Tg)  // K29 SiH2 + H -> SiH + H2
+double k29(double Tg)  // K29 SiH2 + H -> SiH + H2
 {
-  value_type K29;
+  double K29;
   K29 = 2.31e-17;
   return K29;
 }
 
-value_type k30(value_type Tg)  // K30 SiH3-> SiH + H2
+double k30(double Tg)  // K30 SiH3-> SiH + H2
 {
-  value_type K30;
+  double K30;
   K30 = 328.9E-6 * pow((Tg), -3.1) * exp(-(1.94) / (Tg));
   return K30;
 }
 
-value_type k31(value_type Tg)  // K31 SiH3 + H -> SiH2 + H2
+double k31(double Tg)  // K31 SiH3 + H -> SiH2 + H2
 {
-  value_type K31;
+  double K31;
   K31 = 2.49E-17 * exp(-(0.1084) / (Tg));
   return K31;
 }
 
-value_type k32(value_type Tg)  // K32 SiH2- + H2+ -> SiH2 + H2
+double k32(double Tg)  // K32 SiH2- + H2+ -> SiH2 + H2
 {
-  value_type K32;
+  double K32;
   K32 = 5.55E-12 * pow((Tg), -0.5);
   return K32;
 }
 
-value_type k33(value_type Tg)  // K33 SiH3- + H2+ -> SiH3 + H2
+double k33(double Tg)  // K33 SiH3- + H2+ -> SiH3 + H2
 {
-  value_type K33;
+  double K33;
   K33 = 5.55E-12 * pow((Tg), -0.5);
   return K33;
 }
 
-value_type k34(value_type Tg)  // K34 SiH3- +H2+ -> SiH3 + H2
+double k34(double Tg)  // K34 SiH3- +H2+ -> SiH3 + H2
 {
-  value_type K34;
+  double K34;
   K34 = 2.11e-20;
   return K34;
 }
 
-value_type k35(value_type Tg)  // K35 SiH3- + SiH3+ -> Si2H6
+double k35(double Tg)  // K35 SiH3- + SiH3+ -> Si2H6
 {
-  value_type K35;
+  double K35;
   K35 = 2.11e-20;
   return K35;
 }
 
-value_type k36(value_type Tg)  // K36 SiH2- + SiH4 -> Si2H4- + H2
+double k36(double Tg)  // K36 SiH2- + SiH4 -> Si2H4- + H2
 {
-  value_type K36;
+  double K36;
   K36 = 2.11e-20;
   return K36;
 }
 
-value_type k37(value_type Tg)  // K37 SiH2- + SiH3 -> SiH2 + SiH3-
+double k37(double Tg)  // K37 SiH2- + SiH3 -> SiH2 + SiH3-
 {
-  value_type K37;
+  double K37;
   K37 = 2.11e-20;
   return K37;
 }
 
-value_type k38(value_type Tg)  // K38 SiH3- + SiH2 -> Si2H3- + H2
+double k38(double Tg)  // K38 SiH3- + SiH2 -> Si2H3- + H2
 {
-  value_type K38;
+  double K38;
   K38 = 2.11e-20;
   return K38;
 }
 
-value_type k39(value_type Tg)  // K39 SiH3- + SiH4 -> Si2H5- + H2
+double k39(double Tg)  // K39 SiH3- + SiH4 -> Si2H5- + H2
 {
-  value_type K39;
+  double K39;
   K39 = 2.11e-20;
   return K39;
 }
 
-value_type k40(value_type Tg)  // K40 SiH2- + SiH3+ -> Si2H5
+double k40(double Tg)  // K40 SiH2- + SiH3+ -> Si2H5
 {
-  value_type K40;
+  double K40;
   K40 = 2.11e-20;
   return K40;
 }
 
-value_type k41(value_type Tg)  // K41 SiH2- + Ar+ -> SiH2 + Ar
+double k41(double Tg)  // K41 SiH2- + Ar+ -> SiH2 + Ar
 {
-  value_type K41;
+  double K41;
   K41 = 1.44e-12 * pow((Tg), -0.5);
   return K41;
 }
 
-value_type k42(value_type Tg)  // K42 SiH3- + Ar+ -> SiH3 + Ar
+double k42(double Tg)  // K42 SiH3- + Ar+ -> SiH3 + Ar
 {
-  value_type K42;
+  double K42;
   K42 = 1.44E-12 * pow((Tg), -0.5);
   return K42;
 }
 
-value_type k43(value_type Te)  // K43 SiH3 + e ->  SiH3-
+double k43(double Te)  // K43 SiH3 + e ->  SiH3-
 {
-  value_type K43;
+  double K43;
   K43 = 5.71E-16 * pow((Te), -0.5);
   return K43;
 }
 
-value_type k44(value_type Te)  // K44 SiH + e ->  SiH-
+double k44(double Te)  // K44 SiH + e ->  SiH-
 {
-  value_type K44;
+  double K44;
   K44 = 5.71E-15 * pow((Te), -0.5);
   return K44;
 }
 
-value_type k45(value_type Te)  // K45 SiH- + e ->  SiH + 2e
+double k45(double Te)  // K45 SiH- + e ->  SiH + 2e
 {
-  value_type K45;
+  double K45;
   K45 = 3.16E-16 * pow((Te), 0.5) * exp(-(1.25) / (Te));
   return K45;
 }
 
-value_type k46(value_type Tg)  // K46 SiH2- + SiH ->  SiH2 + SiH2m
+double k46(double Tg)  // K46 SiH2- + SiH ->  SiH2 + SiH2m
 {
-  value_type K46;
+  double K46;
   K46 = 2.31e-17;
   return K46;
 }
 
-value_type k47(value_type Tg)  // K47 SiH- + H2p ->  SiH + H2
+double k47(double Tg)  // K47 SiH- + H2p ->  SiH + H2
 {
-  value_type K47;
+  double K47;
   K47 = 3.21e-13;
   return K47;
 }
 
 struct ddriv_sys  // structure qui vient calculer les equations differentielles
 {
+  ddriv_sys(){
+    init();
+  }
+  void init(){
+    DA = state_type(Nbr_espece, 0.0);  // vecteur de diffusion ambipolaire en m2/s
+  }
   void operator()(int* neq, double* t, double* n, double* dndt) {
     /*0=e, 1=Armet, 2=SiH3-, 3=SiH2-, 4=SiH3+, 5=SiH4, 6=SiH3,
     7=H, 8=SiH2, 9=H2, 10=H2+, 11=Si2H5, 12=Si2H2, 13=Si2H4-,
     14=Si2H6, 15=Si2H3-, 16=Si2H5-, 17=SiH-, 18=SiH, 19=Si, 20=Arp, 21=NP*/
-    value_type dpp = n[4] + n[10] + n[20];
-    value_type dnn = n[0] + n[2] + n[3] + n[13] + n[15] + n[16] + n[17];
-    value_type ratep =
+    double dpp = n[4] + n[10] + n[20];
+    double dnn = n[0] + n[2] + n[3] + n[13] + n[15] + n[16] + n[17];
+    double ratep =
         rate * dnn / dpp;  // pour que les charges sortent par paires = et -
 
-    value_type n_mu =
+    double n_mu =
         n[0] * mu[0] + n[4] * mu[4] + n[10] * mu[10] + n[20] * mu[20];
-    value_type n_DL =
+    double n_DL =
         -n[0] * DL[0] + n[4] * DL[4] + n[10] * DL[10] + n[20] * DL[20];
 
-    value_type rr = n_DL / n_mu;
-    state_type DA(Nbr_espece, 0.0);  // vecteur de diffusion ambipolaire en m2/s
+    double rr = n_DL / n_mu;
+
     // diffusion ambipolaire
     DA[0] = DL[0] + mu[0] * rr;  // s-1
     DA[1] = DL[1];
@@ -429,80 +431,80 @@ struct ddriv_sys  // structure qui vient calculer les equations differentielles
     DA[10] = DL[10] - mu[10] * rr;
     DA[20] = DL[20] - mu[20] * rr;
 
-    value_type Vfl =
+    double Vfl =
         cVfl * n[22] / n[21];  // V potentiel flottant e*qNP / 4 pi eps0 rNP
-    value_type sNP = pi * pow(n[21], 2);  // surface de la NP
+    double sNP = pi * pow(n[21], 2);  // surface de la NP
 
     // if (Vfl<0.){
-    value_type facte = sNP * exp(Vfl / Te);  // qNP<0
-    value_type factn = sNP * exp(Vfl / Tg);
-    value_type factp = sNP * (1. - Vfl / Tg); /*}
+    double facte = sNP * exp(Vfl / Te);  // qNP<0
+    double factn = sNP * exp(Vfl / Tg);
+    double factp = sNP * (1. - Vfl / Tg); /*}
 else { facte=sNP*(1.+Vfl/Te); //else qNP>0
             factn=sNP*(1.+Vfl/Tg);
             factp=sNP*exp(-Vfl/Tg);}*/
     // calcul des coefficients pour la diffusion ambipolaire
 
     // chargement des NP
-    value_type ffe = facte * vth[0] * n[0];
-    value_type ffn2 = factn * vth[2] * n[2];
-    value_type ffn3 = factn * vth[3] * n[3];
-    value_type ffp4 = factp * vth[4] * n[4];
-    value_type ffp10 = factp * vth[10] * n[10];
-    value_type ffn13 = factn * vth[13] * n[13];
-    value_type ffn15 = factn * vth[15] * n[15];
-    value_type ffn16 = factn * vth[16] * n[16];
-    value_type ffn17 = factn * vth[17] * n[17];
-    value_type ffp20 = factp * vth[20] * n[20];
+    double ffe = facte * vth[0] * n[0];
+    double ffn2 = factn * vth[2] * n[2];
+    double ffn3 = factn * vth[3] * n[3];
+    double ffp4 = factp * vth[4] * n[4];
+    double ffp10 = factp * vth[10] * n[10];
+    double ffn13 = factn * vth[13] * n[13];
+    double ffn15 = factn * vth[15] * n[15];
+    double ffn16 = factn * vth[16] * n[16];
+    double ffn17 = factn * vth[17] * n[17];
+    double ffp20 = factp * vth[20] * n[20];
 
-    value_type rr1 = k1(Te) * n_Ar * n[0];
-    value_type rr2 = k2(Te) * n_Ar * n[0];
-    value_type rr3 = k3(Te) * n[1] * n[0];
-    value_type rr4 = k4(Tg) * n[1] * n[1];
-    value_type rr5 = k5(Te) * n[1] * n[0];
-    value_type rr6 = k6(Te) * n[5] * n[0];
-    value_type rr7 = k7(Te) * n[5] * n[0];
-    value_type rr8 = k8(Te) * n[5] * n[0];
-    value_type rr9 = k9(Te) * n[5] * n[0];
-    value_type rr10 = k10(Te) * n[5] * n[0];
-    value_type rr11 = k11(Te) * n[6] * n[0];
-    value_type rr12 = k12(Te) * n[6] * n[0];
-    value_type rr13 = k13(Te) * n[2] * n[0];
-    value_type rr14 = k14(Te) * n[3] * n[0];
-    value_type rr15 = k15(Te) * n[8] * n[0];
-    value_type rr16 = k16(Te) * n[9] * n[0];
-    value_type rr17 = k17(Te) * n[9] * n[0];
-    value_type rr18 = k18(Tg) * n[5] * n[1];
-    value_type rr19 = k19(Tg) * n[5] * n[1];
-    value_type rr20 = k20(Tg) * n[6] * n[1];
-    value_type rr21 = k21(Tg) * n[8] * n[1];
-    value_type rr22 = k22(Tg) * n[9] * n[1];
-    value_type rr23 = k23(Tg) * n[6] * n[6];
-    value_type rr24 = k24(Tg) * n[5] * n[6];
-    value_type rr25 = k25(Tg) * n[8] * n[9];
-    value_type rr26 = k26(Tg) * n[8];
-    value_type rr27 = k27(Tg) * n[5] * n[7];
-    value_type rr28 = k28(Tg) * n[8] * n[8];
-    value_type rr29 = k29(Tg) * n[8] * n[7];
-    value_type rr30 = k30(Tg) * n[6];
-    value_type rr31 = k31(Tg) * n[6] * n[7];
-    value_type rr32 = k32(Tg) * n[3] * n[10];
-    value_type rr33 = k33(Tg) * n[2] * n[10];
-    value_type rr34 = k34(Tg) * n[2] * n[6];
-    value_type rr35 = k35(Tg) * n[2] * n[4];
-    value_type rr36 = k36(Tg) * n[3] * n[5];
-    value_type rr37 = k37(Tg) * n[3] * n[6];
-    value_type rr38 = k38(Tg) * n[2] * n[8];
-    value_type rr39 = k39(Tg) * n[2] * n[5];
-    value_type rr40 = k40(Tg) * n[3] * n[4];
-    value_type rr41 = k41(Tg) * n[3] * n[20];
-    value_type rr42 = k42(Tg) * n[2] * n[20];
-    value_type rr43 = k43(Te) * n[6] * n[0];
-    value_type rr44 = k44(Te) * n[18] * n[0];
-    value_type rr45 = k45(Te) * n[17] * n[0];
-    value_type rr46 = k46(Tg) * n[3] * n[18];
-    value_type rr47 = k47(Tg) * n[17] * n[10];
+    double rr1 = k1(Te) * n_Ar * n[0];
+    double rr2 = k2(Te) * n_Ar * n[0];
+    double rr3 = k3(Te) * n[1] * n[0];
+    double rr4 = k4(Tg) * n[1] * n[1];
+    double rr5 = k5(Te) * n[1] * n[0];
+    double rr6 = k6(Te) * n[5] * n[0];
+    double rr7 = k7(Te) * n[5] * n[0];
+    double rr8 = k8(Te) * n[5] * n[0];
+    double rr9 = k9(Te) * n[5] * n[0];
+    double rr10 = k10(Te) * n[5] * n[0];
+    double rr11 = k11(Te) * n[6] * n[0];
+    double rr12 = k12(Te) * n[6] * n[0];
+    double rr13 = k13(Te) * n[2] * n[0];
+    double rr14 = k14(Te) * n[3] * n[0];
+    double rr15 = k15(Te) * n[8] * n[0];
+    double rr16 = k16(Te) * n[9] * n[0];
+    double rr17 = k17(Te) * n[9] * n[0];
+    double rr18 = k18(Tg) * n[5] * n[1];
+    double rr19 = k19(Tg) * n[5] * n[1];
+    double rr20 = k20(Tg) * n[6] * n[1];
+    double rr21 = k21(Tg) * n[8] * n[1];
+    double rr22 = k22(Tg) * n[9] * n[1];
+    double rr23 = k23(Tg) * n[6] * n[6];
+    double rr24 = k24(Tg) * n[5] * n[6];
+    double rr25 = k25(Tg) * n[8] * n[9];
+    double rr26 = k26(Tg) * n[8];
+    double rr27 = k27(Tg) * n[5] * n[7];
+    double rr28 = k28(Tg) * n[8] * n[8];
+    double rr29 = k29(Tg) * n[8] * n[7];
+    double rr30 = k30(Tg) * n[6];
+    double rr31 = k31(Tg) * n[6] * n[7];
+    double rr32 = k32(Tg) * n[3] * n[10];
+    double rr33 = k33(Tg) * n[2] * n[10];
+    double rr34 = k34(Tg) * n[2] * n[6];
+    double rr35 = k35(Tg) * n[2] * n[4];
+    double rr36 = k36(Tg) * n[3] * n[5];
+    double rr37 = k37(Tg) * n[3] * n[6];
+    double rr38 = k38(Tg) * n[2] * n[8];
+    double rr39 = k39(Tg) * n[2] * n[5];
+    double rr40 = k40(Tg) * n[3] * n[4];
+    double rr41 = k41(Tg) * n[3] * n[20];
+    double rr42 = k42(Tg) * n[2] * n[20];
+    double rr43 = k43(Te) * n[6] * n[0];
+    double rr44 = k44(Te) * n[18] * n[0];
+    double rr45 = k45(Te) * n[17] * n[0];
+    double rr46 = k46(Tg) * n[3] * n[18];
+    double rr47 = k47(Tg) * n[17] * n[10];
 
-    value_type ccol = nNP * 4. * sNP / vSi;  // 4*sNP=surface de la NP
+    double ccol = nNP * 4. * sNP / vSi;  // 4*sNP=surface de la NP
 
     dndt[0] = rr1 + rr3 + rr4 - rr8 - rr9 + rr10 - rr11 + rr12 + rr13 + rr14 -
               rr15 + rr17 - rr43 - rr44 + rr45 - DA[0] * n[0] -
@@ -612,11 +614,12 @@ else { facte=sNP*(1.+Vfl/Te); //else qNP>0
     dndt[23] = dndt[13] + dndt[16];
   }
   state_type n;
-  value_type Te;
-  value_type DP;
+  double Te;
+  double DP;
   int p1, p2, g1, g2, g3, g4;
-  value_type Tp, Tx, Tj;
+  double Tp, Tx, Tj;
   state_type DL;
+  state_type DA;
   state_type mu;
   state_type coll;
   state_type vth;
@@ -631,26 +634,26 @@ inline void ret_sys(int* n, double* t, double* yv, double* ydotv) {
 }
 
 // dummy function, required by ddriv2_
-inline void g(int* n, double* t, double* yv, int* iroot) {}
+inline void g(int* n, double* t, double* yv, double* iroot) {}
 
 // calcul de la temperature a partir de la puissance dans le reacteur
 struct etemperature {
-  value_type operator()(value_type const& Te)
+  double operator()(double const& Te)
 
   {  // calcul des coefficients pour la diffusion ambipolaire
-    value_type n_mu =
+    double n_mu =
         mu[0] * n[0] + n[4] * mu[4] + n[10] * mu[10] + n[20] * mu[20];
-    value_type n_DL =
+    double n_DL =
         -n[0] * DL[0] + n[4] * DL[4] + n[10] * DL[10] + n[20] * DL[20];
 
     // diffusion ambipolaire
-    value_type Diffe = DL[0] + mu[0] * n_DL / n_mu;  // s-1
+    double Diffe = DL[0] + mu[0] * n_DL / n_mu;  // s-1
 
-    value_type Vfl =
+    double Vfl =
         cVfl * n[22] / n[21];  // V potentiel flottant e*qNP / 4 pi eps0 rNP
-    value_type sNP = pi * pow(n[21], 2);  // surface de la NP
+    double sNP = pi * pow(n[21], 2);  // surface de la NP
     // if (Vfl<=0.){
-    value_type Fe = sNP * vth[0] * exp(Vfl / Te);
+    double Fe = sNP * vth[0] * exp(Vfl / Te);
     /*}
 else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
 
@@ -664,8 +667,7 @@ else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
            k44(Te) * n[18] * 1.5 * Te + k45(Te) * n[17] * 1.25 +
            Diffe * 1.5 * Te      /*perte sur les parois*/
            + Fe * nNP * 1.5 * Te /*pertes sur les NP*/
-           + rate * 1.5 *
-                 Te; /*perte taux injection evacuation
+           + rate * 1.5 * Te; /*perte taux injection evacuation
 
 
    return -DP / n[0] + k(0, Te) * n_Ar * 16.14 + k(1, Te) * n_Ar * 12.31 +
@@ -684,7 +686,7 @@ else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
   state_type DL;
   state_type mu;
   state_type vth;
-  value_type DP;
+  double DP;
   // fonction pour calculer les K en faisant
   // varier Te dans la bissection
 
@@ -693,7 +695,7 @@ else { Fe=sNP*vth[0]*(1.-Vfl/Te);}*/
 
 // ecriture des densite dans un fichier
 
-void write_density(ofstream& fp, const value_type t, const value_type Te,
+void write_density(ofstream& fp, const double t, const double Te,
                    const state_type& n) {
   fp << t << '\t' << Te << '\t' << n[0] << '\t' << n[1] << '\t' << n[2] << '\t'
      << n[3] << '\t' << n[4] << '\t' << n[5] << '\t' << n[6] << '\t' << n[7]
@@ -708,7 +710,7 @@ int main(int argc, char** argv) {
   ofstream outfile;
   outfile.open("densnonautom.dat");
 
-  value_type Te = 3.;  // valeur initiale de la temperature
+  double Te = 3.;  // valeur initiale de la temperature
 
   // legende
   outfile << "#t" << '\t' << "Te" << '\t' << "e" << '\t' << "Armet" << '\t'
@@ -732,7 +734,7 @@ int main(int argc, char** argv) {
   state_type coll(Nbr_espece, 0.0);  // vecteur collage
   state_type vth(Nbr_espece, 0.0);   // vecteur vitesse thermique
 
-  value_type cvth = 1.56e4 * sqrt(Tg);  // NRL * sqrt (8/pi)
+  double cvth = 1.56e4 * sqrt(Tg);  // NRL * sqrt (8/pi)
 
   vth[0] = 6.69e5 * sqrt(Te);
   vth[1] = cvth / sqrt(40.);
@@ -769,14 +771,14 @@ int main(int argc, char** argv) {
   state_type mu(Nbr_espece, 0.0);  // vecteur de mobilite en m2/(V.s)
 
   // Coefficients de diffusion libres de Chapman-Enskog
-  value_type D_mol = 2.;  // diametre de (molecule + argon)/2 en A
-  value_type D_e = 1.;    // diametre de (electron+ argon)/2 en A
+  double D_mol = 2.;  // diametre de (molecule + argon)/2 en A
+  double D_e = 1.;    // diametre de (electron+ argon)/2 en A
 
-  value_type CE_e = 1.858e-3 * (Tg * 1.1604e4) * sqrt(Te * 1.1604e4) /
+  double CE_e = 1.858e-3 * (Tg * 1.1604e4) * sqrt(Te * 1.1604e4) /
                     (pression * pow(D_e, 2.)) *
                     1.e-4;  // on met les temperatures en K et on convertis pour
                             // l'avoir en m2/s (*1.e-4)
-  value_type CE_mol = 1.858e-3 * pow((Tg * 1.1604e4), 3. / 2.) /
+  double CE_mol = 1.858e-3 * pow((Tg * 1.1604e4), 3. / 2.) /
                       (pression * pow(D_mol, 2.)) *
                       1.e-4;  // on met les temperatures en K et on convertis
                               // pour l'avoir en m2/s (*1.e-4)
@@ -799,7 +801,7 @@ int main(int argc, char** argv) {
   DL[20] = 4.e-3 / (pression * 760.);  // valeur de benjamin
   mu[20] = DL[20] / Tg;
 
-  value_type DP = 0.5 * DL[0] * pow((V / L), 2.);
+  double DP = 0.5 * DL[0] * pow((V / L), 2.);
 
   for (int i = 0; i < Nbr_espece; i++) {
     DL[i] = DL[i] * diff;
@@ -808,15 +810,15 @@ int main(int argc, char** argv) {
 
   // variable du temps
   double t = 0.0;
-  value_type dt = 1.0e-8;
-  value_type Tmax = 1.0;//20.e-3;
-  value_type NT = Tmax / dt;
+  double dt = 1.0e-8;
+  double Tmax = 20.e-3;//
+  double NT = Tmax / dt;
 
   // variable pour la bissection
-  value_type min = Tg;
-  value_type max = 100.;
+  double min = Tg;
+  double max = 100.;
   boost::uintmax_t max_iter = 100;
-  eps_tolerance<value_type> tol(10);
+  eps_tolerance<double> tol(10);
 
   state_type n_new(Nbr_espece, 0.0);  // initialisation du vecteur densite
   n_new = n_ini;
@@ -837,7 +839,7 @@ int main(int argc, char** argv) {
   etemp.DP = DP;
 
   // premier calcul de Te
-  pair<value_type, value_type> pair_Te =
+  pair<double, double> pair_Te =
       toms748_solve(etemp, min, max, tol, max_iter);
 
   Te = pair_Te.first;
@@ -889,6 +891,8 @@ int main(int argc, char** argv) {
     vth[1] = 6.69e5 * sqrt(Te);  // m/s  vitesse thermique electrons
 
     global_sys.Te = Te;
+    global_sys.vth = vth;
+    global_sys.mu = mu;
 
     double tf = t + dt;
 
@@ -897,11 +901,13 @@ int main(int argc, char** argv) {
     //     cerr << "patate1" << endl;
     // assignation des valeur a la fonction etemp
     etemp.n = n_new;
+    etemp.mu = mu;
+    etemp.vth = vth;
     if (i % ((int)(NT / 100)) == 0) {
-      write_density(outfile, t, Te, n_new);
+      write_density(outfile, tf, Te, n_new);
     }
     // trouver un noyuveau Te
-    pair<value_type, value_type> pair_Te =
+    pair<double, double> pair_Te =
         toms748_solve(etemp, min, max, tol, max_iter);
 
     Te = pair_Te.first;
@@ -909,14 +915,14 @@ int main(int argc, char** argv) {
     n_ini = n_new;  // update
   }
 
-  value_type charge =
+  double charge =
       (n_new[20] + n_new[4] + n_new[10] - n_new[0] - n_new[2] - n_new[3] -
        n_new[13] - n_new[15] - n_new[16] - n_new[17]) /
       (n_new[20] + n_new[4] + n_new[10]);
 
   cerr << "charge/dArp=" << charge << endl;
 
-  value_type Si =
+  double Si =
       (n_new[2] + n_new[3] + n_new[4] + n_new[13] * 2 + 2 * n_new[15] +
        n_new[16] * 2 + n_new[17] + n_new[5] + n_new[6] + n_new[8] + n_new[18] +
        2 * n_new[11] + n_new[19] + n_new[12] * 2 + n_new[14] * 2) /
@@ -924,7 +930,7 @@ int main(int argc, char** argv) {
 
   cerr << "Si=" << Si << endl;
 
-  value_type H =
+  double H =
       (3 * n_new[2] + 2 * n_new[3] + 3 * n_new[4] + 2 * n_new[10] +
        4 * n_new[13] + 3 * n_new[15] + 5 * n_new[16] + n_new[17] +
        4 * n_new[5] + 3 * n_new[6] + n_new[7] + 2 * n_new[8] + 2 * n_new[9] +
